@@ -12,10 +12,14 @@
 #define STB_IMAGE_IMPLEMENTATION
 #include "stb_image.h"
 
+#define STB_IMAGE_WRITE_IMPLEMENTATION
+#include "stb_image_write.h"
+
 // const int DEBUG = 1;
-const int K = 2;
-const int MAX_ITERATIONS = 10;
-const float EPSILON = 1e-4; // convergence threshold
+int K = 2;
+const int MAX_ITERATIONS = 100;
+const float EPSILON = 1e-4;            // convergence threshold
+const int CONVERGENCE_PERCENTAGE = 80; // Percentage of centroids that should converge to stop the algorithm
 
 __host__ float *read_image(char *path, int *width, int *height, int *channels)
 {
@@ -215,27 +219,28 @@ __host__ float *update_centroids(int N, int D, int K, float *data_points, float 
             new_centroids[i * D + j] /= cluster_count[i];
         }
     }
-
+    // printf("*************************\n");
     printf("Centroids updated successfully :D\n");
     // Print old and new centroids
-    printf("Old Centroids\n");
-    for (int i = 0; i < K; i++)
-    {
-        for (int j = 0; j < D; j++)
-        {
-            printf("%f ", centroids[i * D + j]);
-        }
-        printf("\n");
-    }
-    printf("\nNew Centroids\n");
-    for (int i = 0; i < K; i++)
-    {
-        for (int j = 0; j < D; j++)
-        {
-            printf("%f ", new_centroids[i * D + j]);
-        }
-        printf("\n");
-    }
+    // printf("Old Centroids\n");
+    // for (int i = 0; i < K; i++)
+    // {
+    //     for (int j = 0; j < D; j++)
+    //     {
+    //         printf("%f ", centroids[i * D + j]);
+    //     }
+    //     printf("\n");
+    // }
+    // printf("\nNew Centroids\n");
+    // for (int i = 0; i < K; i++)
+    // {
+    //     for (int j = 0; j < D; j++)
+    //     {
+    //         printf("%f ", new_centroids[i * D + j]);
+    //     }
+    //     printf("\n");
+    // }
+    // printf("*************************\n");
 
     return new_centroids;
 }
@@ -255,14 +260,11 @@ __host__ bool check_convergence(float *centroids, float *new_centroids, int N, i
     returns: True if converged, False otherwise
     */
     float centroids_distance = 0;
-    for (int i = 0; i < K; i++)
-    {
-        // Compute distance between old and new centroids in all dimensions
-        centroids_distance += distance(centroids + i * D, new_centroids + i * D, D);
-    }
 
-    printf("Centroids distance: %f\n", centroids_distance);
+    // Compute distance between old and new centroids in all dimensions
+    centroids_distance = distance(centroids, new_centroids, D);
 
+    // printf("Centroids distance: %f\n", centroids_distance);
     if (centroids_distance < EPSILON)
     {
         return true;
@@ -270,6 +272,68 @@ __host__ bool check_convergence(float *centroids, float *new_centroids, int N, i
     return false;
 }
 
+__host__ int **generate_cluster_color()
+{
+    int **cluster_color = (int **)malloc(K * sizeof(int *));
+
+    for (int i = 0; i < K; i++)
+    {
+        cluster_color[i] = (int *)malloc(3 * sizeof(int));
+        for (int j = 0; j < 3; j++)
+        {
+            cluster_color[i][j] = rand() % 256;
+        }
+        // if reepating colors [Reassign color]
+        for (int j = 0; j < i; j++)
+        {
+            if (cluster_color[i][0] == cluster_color[j][0] && cluster_color[i][1] == cluster_color[j][1] && cluster_color[i][2] == cluster_color[j][2])
+            {
+                i--;
+                break;
+            }
+        }
+    }
+    return cluster_color;
+}
+
+__host__ unsigned char *clutser_image(float *image, int width, int height, int channels, float *centroids)
+{
+    // Get assigned cluster for each pixel
+    int N = width * height;
+    int D = channels;
+    int *cluster_assignment = assign_data_points_to_centroids(N, D, K, image, centroids);
+
+    // Cluster the image
+    unsigned char *clustered_image = (unsigned char *)malloc(sizeof(unsigned char) * height * width * 3);
+    // float *clustered_image = (float *)malloc(sizeof(float) * height * width * 3);
+
+
+    // Generate Cluster Colors
+    int **cluster_color = generate_cluster_color();
+    printf("Cluster Colors Generated\n");
+    for (int i = 0; i < K; i++)
+    {
+        for (int j = 0; j < 3; j++)
+        {
+            printf("%d ", cluster_color[i][j]);
+        }
+        printf("\n");
+    }
+
+    // Assign color to each pixel
+    for (int i = 0; i < N; i++)
+    {
+        for (int j = 0; j < 3; j++)
+        {
+            clustered_image[i * 3 + j] = cluster_color[cluster_assignment[i]][j];
+        }
+    }
+
+    printf("Image clustered successfully :D\n");
+
+    // Write Image
+    return clustered_image;
+}
 /*
 Kmeans:
 1. Initialize centroids (Random or Kmeans++)
@@ -283,13 +347,14 @@ int main(int argc, char *argv[])
     printf("Hello World\n");
 
     // Input Arguments
-    if (argc != 2)
+    if (argc != 3)
     {
         printf("Usage: %s <input_file>", argv[0]);
         exit(1);
     }
 
     char *input_file_path = argv[1];
+    K = atoi(argv[2]);
 
     printf("Input file path: %s\n", input_file_path);
 
@@ -307,8 +372,8 @@ int main(int argc, char *argv[])
 
     while (iteration < MAX_ITERATIONS)
     {
-        printf("Iteration: %d/%d\n", iteration, MAX_ITERATIONS);
         iteration = iteration + 1;
+        printf("Iteration: %d/%d\n", iteration, MAX_ITERATIONS);
 
         // Assign each data point to the nearest centroid
         int *cluster_assignment = assign_data_points_to_centroids(N, D, K, image, centroids);
@@ -316,6 +381,7 @@ int main(int argc, char *argv[])
         // Update the centroids
         float *new_centroids = update_centroids(N, D, K, image, centroids, cluster_assignment);
 
+        // printf("EPSILON: %f\n", EPSILON);
         int convergedCentroids = 0;
         for (int i = 0; i < K; i++)
         {
@@ -326,19 +392,31 @@ int main(int argc, char *argv[])
         }
         printf("Converged Centroids: %d\n", convergedCentroids);
         // if 80% of the centroids have converged
-        if (convergedCentroids >= K * 0.8)
+        if (convergedCentroids >= K * CONVERGENCE_PERCENTAGE / 100.0)
         {
             printf("Converged\n");
             break;
         }
+
+        // Update centroids
+        centroids = new_centroids;
     }
     if (iteration == MAX_ITERATIONS)
     {
         printf("Max Iterations reached :( \n");
     }
 
+    // Cluster the image
+    unsigned char *clutsered_image = clutser_image(image, width, height, channels, centroids);
+
+    // Save the clustered image
+    std::string input_path(input_file_path);
+    std::string output_path = input_path.substr(0, input_path.find_last_of('.')) + "_output_cpu.png";
+    stbi_write_png(output_path.c_str(), width, height, 3, clutsered_image, width * 3);
+    printf("Image saved successfully at: %s\n", output_path.c_str());
+
     return 0;
 }
 
 // nvcc -o out  ./cpu.cu
-// ./out ./input.png
+// ./out ./input.png 2
