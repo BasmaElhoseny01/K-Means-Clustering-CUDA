@@ -17,10 +17,12 @@ def save_as_grayscale(input_path, output_path):
 if __name__ == "__main__":
     # Check if command-line arguments are provided correctly
     if len(sys.argv) != 3:
-        print("Usage: python script.py <input_image_path> <output_image_path>")
+        print("Usage: python ./test/scripts/convert_1_channel.py <input_image_path> <output_image_path>")
         sys.exit(1)
 
     input_path = sys.argv[1]
     output_path = sys.argv[2]
 
     save_as_grayscale(input_path, output_path)
+
+# python ./tests/scripts/convert_1_channel.py .\tests\image_2.png .\tests\image_2_grey.png   
