@@ -32,9 +32,9 @@ __host__ float *read_image(char *path, int *width, int *height, int *channels)
         printf("Error loading image\n");
         exit(1);
     }
-    if (*channels != 1)
+    if (*channels != 1 && *channels != 3)
     {
-        printf("Error: Image should be grayscale: %d\n", *channels);
+        printf("Error: Image should be grayscale or RGB : %d\n", *channels);
         exit(1);
     }
 
@@ -221,7 +221,7 @@ __host__ float *update_centroids(int N, int D, int K, float *data_points, float 
     }
     // printf("*************************\n");
     printf("Centroids updated successfully :D\n");
-    // Print old and new centroids
+    // // Print old and new centroids
     // printf("Old Centroids\n");
     // for (int i = 0; i < K; i++)
     // {
@@ -418,5 +418,5 @@ int main(int argc, char *argv[])
     return 0;
 }
 
-// nvcc -o out_cpu_1  ./cpu.cu
-// ./out_cpu_1 ./input.png 2
+// nvcc -o out_cpu_3  ./cpu_3.cu
+// ./out_cpu_3 ./input.png 2
