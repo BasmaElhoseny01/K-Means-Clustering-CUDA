@@ -58,6 +58,7 @@ __host__ float *read_image(char *path, int *width, int *height, int *channels)
 
     printf("Image loaded successfully\n");
 
+    // printf("Width: %d, Height: %d, Channels: %d\n", *width, *height, *channels);
     // for (int i = 0; i < (*height) * (*width) * (*channels); i++)
     // {
     //     printf("%f ", image[i]);

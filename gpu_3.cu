@@ -21,6 +21,7 @@
 #define CONVERGENCE_PERCENTAGE 80
 
 const int K_max = 20;
+const int D=3;
 int K = -1;
 
 __host__ float *read_image(char *path, int *width, int *height, int *channels)
@@ -34,9 +35,10 @@ __host__ float *read_image(char *path, int *width, int *height, int *channels)
         printf("Error loading image\n");
         exit(1);
     }
-    if (*channels != 1)
+
+    if (*channels != 3)
     {
-        printf("Error: Image should be grayscale: %d\n", *channels);
+        printf("Error: Image should be RGB : %d\n", *channels);
         exit(1);
     }
 
@@ -59,7 +61,7 @@ __host__ float *read_image(char *path, int *width, int *height, int *channels)
     stbi_image_free(image_data);
 
     printf("Image loaded successfully\n");
-    
+
     // printf("Width: %d, Height: %d, Channels: %d\n", *width, *height, *channels);
     // for (int i = 0; i < (*height) * (*width) * (*channels); i++)
     // {
@@ -151,9 +153,13 @@ __global__ void update_cluster_centroids(int data_points_num, int dimensions_num
     const int block_tid = threadIdx.x;
 
     // Shared memory for reduction
-    __shared__ float shared_data_points[THREADS_PER_BLOCK];
+    __shared__ float shared_data_points[THREADS_PER_BLOCK*D];
     // each thread loads the data point to shared memory
-    shared_data_points[block_tid] = d_data_points[grid_tid];
+    for (int i = 0; i < dimensions_num; i++)
+    {
+        shared_data_points[block_tid * dimensions_num + i] = d_data_points[grid_tid * dimensions_num + i];
+    }
+    // shared_data_points[block_tid] = d_data_points[grid_tid];
 
     __shared__ int shared_cluster_assignment[THREADS_PER_BLOCK];
     // each thread loads the cluster assignment to shared memory
@@ -163,7 +169,7 @@ __global__ void update_cluster_centroids(int data_points_num, int dimensions_num
 
     if (block_tid == 0)
     {
-        float data_point_sum[K_max] = {0}; // sum of data points for each cluster
+        float data_point_sum[K_max*D] = {0}; // sum of data points for each cluster
         int cluster_size[K_max] = {0};     // temporary cluster size
 
         // for each data point, check its cluster assignment
@@ -171,15 +177,23 @@ __global__ void update_cluster_centroids(int data_points_num, int dimensions_num
         for (int i = 0; i < blockDim.x; i++)
         {
             int cluster_id = shared_cluster_assignment[i];
-            data_point_sum[cluster_id] += shared_data_points[i];
             cluster_size[cluster_id] += 1;
+            for (int j = 0; j < dimensions_num; j++)
+            {
+                data_point_sum[cluster_id * dimensions_num + j] += shared_data_points[i * dimensions_num + j];
+            }
+            // data_point_sum[cluster_id] += shared_data_points[i];
         }
 
         // update the global centroids
         for (int i = 0; i < K; i++)
         {
-            atomicAdd(&d_centroids[i], data_point_sum[i]);
             atomicAdd(&d_cluster_sizes[i], cluster_size[i]);
+            for (int j = 0; j < dimensions_num; j++)
+            {
+                atomicAdd(&d_centroids[i * dimensions_num + j], data_point_sum[i * dimensions_num + j]);
+            }
+            // atomicAdd(&d_centroids[i], data_point_sum[i]);
         }
     }
 }
@@ -274,11 +288,10 @@ __host__ int **generate_cluster_color()
     return cluster_color;
 }
 
-__host__ unsigned char *clutser_image(float *image, int width, int height, int channels, int *cluster_assignment)
+__host__ unsigned char *clutser_image(float *image, int width, int height, int *cluster_assignment)
 {
     // Get assigned cluster for each pixel
     int N = width * height;
-    int D = channels;
 
     // Cluster the image
     unsigned char *clustered_image = (unsigned char *)malloc(sizeof(unsigned char) * height * width * 3);
@@ -326,7 +339,7 @@ int main(int argc, char *argv[])
     // Input Arguments
     if (argc < 2)
     {
-        printf("Usage: %s <input_file>", argv[0]);
+        printf("Usage: %s <input_file> <K>", argv[0]);
         exit(1);
     }
 
@@ -341,7 +354,6 @@ int main(int argc, char *argv[])
 
     // Number of blocks
     int N = width * height; // no of data points
-    int D = channels;       // no of dimensions [1 as start]
 
     // Initialize centroids
     float *centroids = intilize_centroids(N, D, K, image);
@@ -395,7 +407,6 @@ int main(int argc, char *argv[])
         //     printf("%d ", cluster_assignment[i]);
         // }
 
-
         // Reset the cluster sizes
         cudaMemset(d_cluster_sizes, 0, K * sizeof(int));
 
@@ -432,9 +443,7 @@ int main(int argc, char *argv[])
                 new_centroids[i * D + j] /= cluster_sizes[i];
             }
         }
-        // printf("Centroids updated successfully :D\n");
-        // printf("Clusters Sizes: %d\n", sum);
-        // printf("Points Sum: %d\n", sum2);
+        printf("Centroids updated successfully :D\n");
         // printf("*************************\n");
         // // Print old and new centroids
         // printf("Old Centroids\n");
@@ -485,14 +494,14 @@ int main(int argc, char *argv[])
     // Copy Assigments
     cudaMemcpy(cluster_assignment, d_cluster_assignment, N * sizeof(int), cudaMemcpyDeviceToHost);
 
-    // Cluster Assignments
+    // // Cluster Assignments
     // printf("*************************\n");
     // for (int i = 0; i < N; i++)
     // {
     // printf("%d ", cluster_assignment[i]);
     // }
     // Cluster the image
-    unsigned char *clutsered_image = clutser_image(image, width, height, channels, cluster_assignment);
+    unsigned char *clutsered_image = clutser_image(image, width, height, cluster_assignment);
 
     // Save the clustered image
     std::string input_path(input_file_path);
@@ -503,5 +512,5 @@ int main(int argc, char *argv[])
     return 0;
 }
 
-// nvcc -o out_gpu_1  ./gpu.cu
-// ./out_gpu_1 .\tests\image_3_grey.png 2
+// nvcc -o out_gpu_3  ./gpu_3.cu
+// ./out_gpu_3 .\tests\image_3.png 2
