@@ -104,14 +104,14 @@ __host__ float *intilize_centroids(int N, int D, int K, float *data_points)
 
     printf("Centroids initialized successfully :D\n");
 
-    // for (int i = 0; i < K; i++)
-    // {
-    //     for (int j = 0; j < D; j++)
-    //     {
-    //         printf("%f ", centroids[i * D + j]);
-    //     }
-    //     printf("\n");
-    // }
+    for (int i = 0; i < K; i++)
+    {
+        for (int j = 0; j < D; j++)
+        {
+            printf("%f ", centroids[i * D + j]);
+        }
+        printf("\n");
+    }
 
     return centroids;
 }
@@ -219,28 +219,28 @@ __host__ float *update_centroids(int N, int D, int K, float *data_points, float 
             new_centroids[i * D + j] /= cluster_count[i];
         }
     }
-    // printf("*************************\n");
+    printf("*************************\n");
     printf("Centroids updated successfully :D\n");
-    // Print old and new centroids
-    // printf("Old Centroids\n");
-    // for (int i = 0; i < K; i++)
-    // {
-    //     for (int j = 0; j < D; j++)
-    //     {
-    //         printf("%f ", centroids[i * D + j]);
-    //     }
-    //     printf("\n");
-    // }
-    // printf("\nNew Centroids\n");
-    // for (int i = 0; i < K; i++)
-    // {
-    //     for (int j = 0; j < D; j++)
-    //     {
-    //         printf("%f ", new_centroids[i * D + j]);
-    //     }
-    //     printf("\n");
-    // }
-    // printf("*************************\n");
+    // // Print old and new centroids
+    printf("Old Centroids\n");
+    for (int i = 0; i < K; i++)
+    {
+        for (int j = 0; j < D; j++)
+        {
+            printf("%f ", centroids[i * D + j]);
+        }
+        printf("\n");
+    }
+    printf("\nNew Centroids\n");
+    for (int i = 0; i < K; i++)
+    {
+        for (int j = 0; j < D; j++)
+        {
+            printf("%f ", new_centroids[i * D + j]);
+        }
+        printf("\n");
+    }
+    printf("*************************\n");
 
     return new_centroids;
 }
@@ -349,7 +349,7 @@ int main(int argc, char *argv[])
     // Input Arguments
     if (argc != 3)
     {
-        printf("Usage: %s <input_file>", argv[0]);
+        printf("Usage: %s <input_file> <K>", argv[0]);
         exit(1);
     }
 
