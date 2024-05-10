@@ -343,11 +343,9 @@ __host__ unsigned char *clutser_image(float *image, int width, int height, int c
     int N = width * height;
     int D = channels;
 
-
     // Cluster the image
     unsigned char *clustered_image = (unsigned char *)malloc(sizeof(unsigned char) * height * width * 3);
     // float *clustered_image = (float *)malloc(sizeof(float) * height * width * 3);
-
 
     // Generate Cluster Colors
     int **cluster_color = generate_cluster_color();
@@ -456,14 +454,9 @@ int main(int argc, char *argv[])
         }
 
         printf("Cluster assignment done successfully :D\n");
-        // printf("***************************************\n");
-        // cudaMemcpy(cluster_assignment,d_cluster_assignment, N * sizeof(int), cudaMemcpyDeviceToHost);
-        // for(int i = 0; i < 20; i++)
-        // {
-        //     printf("%d     ", cluster_assignment[i]);
-        // }
-        // printf("***************************************\n");
 
+        // Reset the cluster sizes
+        cudaMemset(d_cluster_sizes, 0, K * sizeof(int));
 
         update_cluster_centroids<<<num_blocks, THREADS_PER_BLOCK>>>(N, D, d_image, d_cluster_assignment, d_centroids, d_cluster_sizes);
         cudaDeviceSynchronize();
@@ -490,36 +483,42 @@ int main(int argc, char *argv[])
                 printf("Warning: Empty cluster %d\n", i);
             }
         }
+        int sum = 0;
+        int sum2 = 0;
         // Update the centroids
         for (int i = 0; i < K; i++)
         {
             for (int j = 0; j < D; j++)
             {
+                sum += cluster_sizes[i];
+                sum2 += new_centroids[i * D + j];
                 new_centroids[i * D + j] /= cluster_sizes[i];
             }
         }
-        printf("Centroids updated successfully :D\n");
-        printf("*************************\n");
-        // Print old and new centroids
-        printf("Old Centroids\n");
-        for (int i = 0; i < K; i++)
-        {
-            for (int j = 0; j < D; j++)
-            {
-                printf("%f ", centroids[i * D + j]);
-            }
-            printf("\n");
-        }
-        printf("\nNew Centroids\n");
-        for (int i = 0; i < K; i++)
-        {
-            for (int j = 0; j < D; j++)
-            {
-                printf("%f ", new_centroids[i * D + j]);
-            }
-            printf("\n");
-        }
-        printf("*************************\n");
+        // printf("Centroids updated successfully :D\n");
+        // printf("Clusters Sizes: %d\n", sum);
+        // printf("Points Sum: %d\n", sum2);
+        // printf("*************************\n");
+        // // Print old and new centroids
+        // printf("Old Centroids\n");
+        // for (int i = 0; i < K; i++)
+        // {
+        //     for (int j = 0; j < D; j++)
+        //     {
+        //         printf("%f ", centroids[i * D + j]);
+        //     }
+        //     printf("\n");
+        // }
+        // printf("\nNew Centroids\n");
+        // for (int i = 0; i < K; i++)
+        // {
+        //     for (int j = 0; j < D; j++)
+        //     {
+        //         printf("%f ", new_centroids[i * D + j]);
+        //     }
+        //     printf("\n");
+        // }
+        // printf("*************************\n");
 
         // check convergence
         int convergedCentroids = 0;
@@ -537,7 +536,7 @@ int main(int argc, char *argv[])
             printf("Converged\n");
             break;
         }
-   
+
         // Update centroids
         centroids = new_centroids;
     }
@@ -547,21 +546,21 @@ int main(int argc, char *argv[])
     }
 
     // // Copy Assigments
-    cudaMemcpy(cluster_assignment,d_cluster_assignment,N * sizeof(int),cudaMemcpyDeviceToHost);
-    printf("*************************\n");
+    cudaMemcpy(cluster_assignment, d_cluster_assignment, N * sizeof(int), cudaMemcpyDeviceToHost);
     // Cluster Assignments
+    // printf("*************************\n");
     // for (int i = 0; i < N; i++)
     // {
         // printf("%d ", cluster_assignment[i]);
     // }
     // Cluster the image
-    // unsigned char *clutsered_image = clutser_image(image, width, height, channels, cluster_assignment);
+    unsigned char *clutsered_image = clutser_image(image, width, height, channels, cluster_assignment);
 
-    // // Save the clustered image
-    // std::string input_path(input_file_path);
-    // std::string output_path = input_path.substr(0, input_path.find_last_of('.')) + "_output_gpu.png";
-    // stbi_write_png(output_path.c_str(), width, height, 3, clutsered_image, width * 3);
-    // printf("Image saved successfully at: %s\n", output_path.c_str());
+    // Save the clustered image
+    std::string input_path(input_file_path);
+    std::string output_path = input_path.substr(0, input_path.find_last_of('.')) + "_output_gpu.png";
+    stbi_write_png(output_path.c_str(), width, height, 3, clutsered_image, width * 3);
+    printf("Image saved successfully at: %s\n", output_path.c_str());
 
     return 0;
 }
