@@ -371,6 +371,10 @@ int main(int argc, char *argv[])
 
     int iteration = 0;
 
+    // Compute Time
+    clock_t start, end;
+    double cpu_time_used;
+    start = clock();
     while (iteration < MAX_ITERATIONS)
     {
         iteration = iteration + 1;
@@ -406,6 +410,9 @@ int main(int argc, char *argv[])
     {
         printf("Max Iterations reached :( \n");
     }
+    
+    end = clock();
+    cpu_time_used = ((double)(end - start)) / CLOCKS_PER_SEC;
 
     // Cluster the image
     unsigned char *clutsered_image = clutser_image(image, width, height, channels, centroids);
@@ -416,8 +423,9 @@ int main(int argc, char *argv[])
     stbi_write_png(output_path.c_str(), width, height, 3, clutsered_image, width * 3);
     printf("Image saved successfully at: %s\n", output_path.c_str());
 
+    printf("Time taken: %f\n", cpu_time_used);
     return 0;
 }
 
 // nvcc -o out_cpu_3  ./cpu_3.cu
-// ./out_cpu_3 ./input.png 2
+//   ./out_cpu_3 .\tests\image_3.png 5

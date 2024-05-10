@@ -377,6 +377,10 @@ int main(int argc, char *argv[])
     int num_blocks = (N + THREADS_PER_BLOCK - 1) / THREADS_PER_BLOCK; // ceil(N/THREADS_PER_BLOCK)
 
     int iteration = 0;
+    // Compute Time
+    clock_t start, end;
+    double time_used;
+    start = clock();
     while (iteration < MAX_ITERATIONS)
     {
         // print the current
@@ -490,6 +494,9 @@ int main(int argc, char *argv[])
     {
         printf("Max Iterations reached :( \n");
     }
+    end = clock();
+    time_used = ((double)(end - start)) / CLOCKS_PER_SEC;
+
 
     // Copy Assigments
     cudaMemcpy(cluster_assignment, d_cluster_assignment, N * sizeof(int), cudaMemcpyDeviceToHost);
@@ -509,8 +516,9 @@ int main(int argc, char *argv[])
     stbi_write_png(output_path.c_str(), width, height, 3, clutsered_image, width * 3);
     printf("Image saved successfully at: %s\n", output_path.c_str());
 
+    printf("Time taken: %f\n", time_used);
     return 0;
 }
 
 // nvcc -o out_gpu_3  ./gpu_3.cu
-// ./out_gpu_3 .\tests\image_3.png 2
+// ./out_gpu_3 .\tests\image_3.png 5
