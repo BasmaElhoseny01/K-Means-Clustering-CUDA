@@ -14,11 +14,14 @@
 
 #define STB_IMAGE_WRITE_IMPLEMENTATION
 #include "stb_image_write.h"
+
 #define THREADS_PER_BLOCK 32
 #define EPSILON 0.0001
 #define MAX_ITERATIONS 100
 #define CONVERGENCE_PERCENTAGE 80
-const int K = 2;
+
+const int K_max = 20;
+int K = -1;
 
 __host__ float *read_image(char *path, int *width, int *height, int *channels)
 {
@@ -169,7 +172,7 @@ __global__ void assign_data_points_to_centroids(int N, int D, int K, float *d_da
  * @return __global__
  */
 __global__ void update_cluster_centroids(int data_points_num, int dimensions_num,
-                                         float *d_data_points, int *d_cluster_assignment, float *d_centroids, int *d_cluster_sizes)
+                                         float *d_data_points, int *d_cluster_assignment, float *d_centroids, int *d_cluster_sizes, int K)
 {
     // Each block is responsible for a segment of data points
     // Each thread is responsible for a bringing data point to the shared memory
@@ -211,15 +214,8 @@ __global__ void update_cluster_centroids(int data_points_num, int dimensions_num
 
     if (block_tid == 0)
     {
-        // for (int i = 0; i < K; i++)
-        // {
-        //     for (int j = 0; j < dimensions_num; j++)
-        //     {
-        //         printf("Centroids: %f\n", d_centroids[i * dimensions_num + j]);
-        //     }
-        // }
-        float data_point_sum[K] = {0}; // sum of data points for each cluster
-        int cluster_size[K] = {0};     // temporary cluster size
+        float data_point_sum[K_max] = {0}; // sum of data points for each cluster
+        int cluster_size[K_max] = {0};     // temporary cluster size
 
         // for each data point, check its cluster assignment
         // and add the data point to the corresponding cluster
@@ -237,14 +233,6 @@ __global__ void update_cluster_centroids(int data_points_num, int dimensions_num
             atomicAdd(&d_cluster_sizes[i], cluster_size[i]);
         }
     }
-
-    // __syncthreads();
-
-    // // update the centroids
-    // if (grid_tid < K)
-    // {
-    //     centroids[grid_tid] = centroids[grid_tid] / cluster_size[grid_tid];
-    // }
 }
 __host__ float *intilize_centroids(int N, int D, int K, float *data_points)
 {
@@ -394,7 +382,7 @@ int main(int argc, char *argv[])
     }
 
     char *input_file_path = argv[1];
-    // K = atoi(argv[2]);
+    K = atoi(argv[2]);
 
     printf("Input file path: %s\n", input_file_path);
 
@@ -416,13 +404,11 @@ int main(int argc, char *argv[])
     float *d_centroids = 0;
     int *d_cluster_assignment = 0;
     int *d_cluster_sizes = 0;
-    // float *d_updated_centroids = 0;
 
     cudaMalloc(&d_image, N * D * sizeof(float));
     cudaMalloc(&d_centroids, K * D * sizeof(float));
     cudaMalloc(&d_cluster_assignment, N * sizeof(int));
     cudaMalloc(&d_cluster_sizes, K * sizeof(int)); // Array to store the size of each cluster
-    // cudaMalloc(&d_updated_centroids, K * D * sizeof(float)); // temporary centroids
 
     // Copy data from host to devic [image]
     cudaMemcpy(d_image, image, N * D * sizeof(float), cudaMemcpyHostToDevice);
@@ -458,7 +444,7 @@ int main(int argc, char *argv[])
         // Reset the cluster sizes
         cudaMemset(d_cluster_sizes, 0, K * sizeof(int));
 
-        update_cluster_centroids<<<num_blocks, THREADS_PER_BLOCK>>>(N, D, d_image, d_cluster_assignment, d_centroids, d_cluster_sizes);
+        update_cluster_centroids<<<num_blocks, THREADS_PER_BLOCK>>>(N, D, d_image, d_cluster_assignment, d_centroids, d_cluster_sizes, K);
         cudaDeviceSynchronize();
         error = cudaGetLastError();
         if (error != cudaSuccess)
@@ -483,15 +469,11 @@ int main(int argc, char *argv[])
                 printf("Warning: Empty cluster %d\n", i);
             }
         }
-        int sum = 0;
-        int sum2 = 0;
         // Update the centroids
         for (int i = 0; i < K; i++)
         {
             for (int j = 0; j < D; j++)
             {
-                sum += cluster_sizes[i];
-                sum2 += new_centroids[i * D + j];
                 new_centroids[i * D + j] /= cluster_sizes[i];
             }
         }
@@ -551,7 +533,7 @@ int main(int argc, char *argv[])
     // printf("*************************\n");
     // for (int i = 0; i < N; i++)
     // {
-        // printf("%d ", cluster_assignment[i]);
+    // printf("%d ", cluster_assignment[i]);
     // }
     // Cluster the image
     unsigned char *clutsered_image = clutser_image(image, width, height, channels, cluster_assignment);
@@ -566,27 +548,4 @@ int main(int argc, char *argv[])
 }
 
 // nvcc -o out_gpu_1  ./gpu.cu
-// ./out_gpu_1 ./input.png 2
-
-/**
- * @brief ZEBALA
- * int segment_start = blockIdx.x * blockDim.x * 2; // to load 2 data points per thread,
-                                                     // ! later we'll need to consider data points dimensions
-
-    int grid_tid = segment_start + threadIdx.x; // thread index in grid level
-    int block_tid = threadIdx.x;                // thread index in block level
-    // each thread is responsible for 2 data points
-    for (int stride = blockDim.x; stride > 0; stride /= 2)
-    {
-        if (block_tid < stride)
-        {
-            data_points[grid_tid] += data_points[grid_tid + stride];
-        }
-        __syncthreads();
-    }
-
-    if (block_tid == 0)
-    {
-        centroids[blockIdx.x] = data_points[segment_start];
-    }
- */
+// ./out_gpu_1 .\tests\image_3_grey.png 2
