@@ -115,7 +115,7 @@ cluster_assignment: cluster assignment for each data point
 
 returns: None
 */
-__global__ void assign_data_points_to_centroids(int N, int D, int K, float *data_points, float *centroids, int *cluster_assignment)
+__global__ void assign_data_points_to_centroids(int N, int D, int K, float *d_data_points, float *d_centroids, int *d_cluster_assignment)
 {
     // thread index in grid level
     // each thread is responsible for 1 pixel
@@ -133,7 +133,7 @@ __global__ void assign_data_points_to_centroids(int N, int D, int K, float *data
     for (int i = 0; i < K; i++)
     {
         // Compute the distance between the data point and the centroid
-        float dist = distance(data_points + tid * D, centroids + i * D, D);
+        float dist = distance(d_data_points + tid * D, d_centroids + i * D, D);
 
         if (dist < min_distance)
         {
@@ -143,7 +143,7 @@ __global__ void assign_data_points_to_centroids(int N, int D, int K, float *data
     }
 
     // Assign the data point to the nearest centroid
-    cluster_assignment[tid] = min_centroid;
+    d_cluster_assignment[tid] = min_centroid;
 }
 
 /**
@@ -158,21 +158,14 @@ __global__ void assign_data_points_to_centroids(int N, int D, int K, float *data
  * @return __global__
  */
 __global__ void update_cluster_centroids(int data_points_num, int dimensions_num,
-                                         float *data_points, float *centroids, int *cluster_assignment, int *cluster_size)
+                                         float *d_data_points, float *d_centroids, int *d_cluster_assignment, int *d_cluster_sizes)
 {
+    // Each block is responsible for a segment of data points
+    // Each thread is responsible for a bringing data point to the shared memory
 
     // thread in grid level
     const int grid_tid = blockIdx.x * blockDim.x + threadIdx.x;
 
-    if (grid_tid == 0)
-    {
-        // print initial cluster sizes
-        for (int i = 0; i < K; i++)
-        {
-            // printf("\n");
-            printf(" FROM DEVICE Cluster %d size: %d\n", i, cluster_size[i]);
-        }
-    }
     // check for out of bounds
     if (grid_tid >= data_points_num)
         return;
@@ -182,118 +175,53 @@ __global__ void update_cluster_centroids(int data_points_num, int dimensions_num
 
     // Shared memory for reduction
     __shared__ float shared_data_points[THREADS_PER_BLOCK];
-
     // each thread loads the data point to shared memory
-    shared_data_points[block_tid] = data_points[grid_tid];
+    shared_data_points[block_tid] = d_data_points[grid_tid];
+    // print shared data points
+    // if (blockIdx.x == 0)
+    // {
+    //     printf("Shared Data Points: %f\n", shared_data_points[0]);
+    // }
 
     __shared__ float shared_cluster_assignment[THREADS_PER_BLOCK];
-
     // each thread loads the cluster assignment to shared memory
-    shared_cluster_assignment[block_tid] = cluster_assignment[grid_tid];
+    shared_cluster_assignment[block_tid] = d_cluster_assignment[grid_tid];
 
-    __syncthreads();
-
-    if (block_tid == 0)
+    if (blockIdx.x == 0)
     {
-        float data_point_sum[K] = {0};
-        int temp_cluster_size[K] = {0};
-
-        // for each data point, check its cluster assignment
-        // and add the data point to the corresponding cluster
-        for (int i = 0; i < blockDim.x; i++)
-        {
-            int cluster_id = shared_cluster_assignment[i];
-            data_point_sum[cluster_id] += shared_data_points[i];
-            temp_cluster_size[cluster_id] += 1;
-        }
-
-        // update the global centroids
-        for (int i = 0; i < K; i++)
-        {
-            atomicAdd(&centroids[i], data_point_sum[i]);
-            atomicAdd(&cluster_size[i], temp_cluster_size[i]);
-        }
+        printf("Cluster Assigment %f\n", shared_cluster_assignment[block_tid]);
     }
 
     __syncthreads();
 
-    // update the centroids
-    if (grid_tid < K)
-    {
-        centroids[grid_tid] = centroids[grid_tid] / cluster_size[grid_tid];
-    }
-
-    /////////////////////////////////////////////////////////////////
-    /////////////////////////////////////////////////////////////////
-
-    /////////////////////////////////////////////////////////////////
-    /////////////////////////////////////////////////////////////////
-
-    // Shared memory for reduction
-    // __shared__ float s_centroids[32 * 3];
-    // __shared__ int s_counts[32];
-
-    // // Thread index in the block
-    // int tid = threadIdx.x;
-
-    // // Block index
-    // int bid = blockIdx.x;
-
-    // // Block size
-    // int block_size = blockDim.x;
-
-    // // Number of blocks
-    // int num_blocks = gridDim.x;
-
-    // // Initialize shared memory
-    // for (int i = tid; i < clusters_num * dimensions_num; i += block_size)
+    // if (block_tid == 0)
     // {
-    //     s_centroids[i] = 0;
-    // }
+    //     float data_point_sum[K] = {0};
+    //     int temp_cluster_size[K] = {0};
 
-    // for (int i = tid; i < clusters_num; i += block_size)
-    // {
-    //     s_counts[i] = 0;
-    // }
-
-    // __syncthreads();
-
-    // // Update shared memory
-    // for (int i = bid * block_size + tid; i < data_points_num; i += block_size * num_blocks)
-    // {
-    //     int cluster_id = cluster_assignment[i];
-    //     for (int j = 0; j < dimensions_num; j++)
+    //     // for each data point, check its cluster assignment
+    //     // and add the data point to the corresponding cluster
+    //     for (int i = 0; i < blockDim.x; i++)
     //     {
-    //         atomicAdd(&s_centroids[cluster_id * dimensions_num + j], data_points[i * dimensions_num + j]);
+    //         int cluster_id = shared_cluster_assignment[i];
+    //         data_point_sum[cluster_id] += shared_data_points[i];
+    //         temp_cluster_size[cluster_id] += 1;
     //     }
-    //     atomicAdd(&s_counts[cluster_id], 1);
-    // }
 
-    // __syncthreads();
-
-    // // Reduction
-    // for (int i = tid; i < clusters_num * dimensions_num; i += block_size)
-    // {
-    //     for (int j = 1; j < num_blocks; j++)
+    //     // update the global centroids
+    //     for (int i = 0; i < K; i++)
     //     {
-    //         s_centroids[i] += s_centroids[j * block_size + i];
-    //     }
-    // }
-
-    // for (int i = tid; i < clusters_num; i += block_size)
-    // {
-    //     for (int j = 1; j < num_blocks; j++)
-    //     {
-    //         s_counts[i] += s_counts[j * block_size + i];
+    //         atomicAdd(&centroids[i], data_point_sum[i]);
+    //         atomicAdd(&cluster_size[i], temp_cluster_size[i]);
     //     }
     // }
 
     // __syncthreads();
 
-    // // Update centroids
-    // for (int i = tid; i < clusters_num * dimensions_num; i += block_size)
+    // // update the centroids
+    // if (grid_tid < K)
     // {
-    //     centroids[i] = s_centroids[i] / s_counts[i / dimensions_num];
+    //     centroids[grid_tid] = centroids[grid_tid] / cluster_size[grid_tid];
     // }
 }
 __host__ float *intilize_centroids(int N, int D, int K, float *data_points)
@@ -391,8 +319,6 @@ int main(int argc, char *argv[])
     int width, height, channels;
     float *image = read_image(input_file_path, &width, &height, &channels);
 
-    int current_iteration = 0;
-
     // Number of blocks
     int N = width * height; // no of data points
     int D = channels;       // no of dimensions [1 as start]
@@ -400,91 +326,99 @@ int main(int argc, char *argv[])
     // Initialize centroids
     float *centroids = intilize_centroids(N, D, K, image);
     int *cluster_assignment = (int *)malloc(N * sizeof(int));
+    int *cluster_sizes = (int *)malloc(K * sizeof(int)); // Array to store the size of each cluster
 
     // Device Memory Allocation
     float *d_image = 0;
     float *d_centroids = 0;
     int *d_cluster_assignment = 0;
+    int *d_cluster_sizes = 0;
+    float *d_updated_centroids = 0;
 
     cudaMalloc(&d_image, N * D * sizeof(float));
     cudaMalloc(&d_centroids, K * D * sizeof(float));
     cudaMalloc(&d_cluster_assignment, N * sizeof(int));
+    cudaMalloc(&d_cluster_sizes, K * sizeof(int));           // Array to store the size of each cluster
+    cudaMalloc(&d_updated_centroids, K * D * sizeof(float)); // temporary centroids
 
-    // Copy data from host to device
+    // Copy data from host to devic [image]
     cudaMemcpy(d_image, image, N * D * sizeof(float), cudaMemcpyHostToDevice);
-    int num_blocks = (N + THREADS_PER_BLOCK - 1) / THREADS_PER_BLOCK;
 
-    while (current_iteration < MAX_ITERATIONS)
+    int num_blocks = (N + THREADS_PER_BLOCK - 1) / THREADS_PER_BLOCK; // ceil(N/THREADS_PER_BLOCK)
+
+    int iteration = 0;
+    while (iteration < MAX_ITERATIONS)
     {
         // print the current
-        current_iteration++;
-        printf("Iteration: %d/%d\n", current_iteration, MAX_ITERATIONS);
+        iteration++;
+        printf("Iteration: %d/%d\n", iteration, MAX_ITERATIONS);
 
-        // Copy data from host to device
+        // Copy data from host to device [centroids]
         cudaMemcpy(d_centroids, centroids, K * D * sizeof(float), cudaMemcpyHostToDevice);
 
         // call the kernel [assign_data_points_to_centroids]
         assign_data_points_to_centroids<<<num_blocks, THREADS_PER_BLOCK>>>(N, D, K, d_image, d_centroids, d_cluster_assignment);
+
         cudaDeviceSynchronize();
         cudaError_t error = cudaGetLastError();
         if (error != cudaSuccess)
         {
             // in red
             printf("\033[1;31m");
-            printf("CUDA error: %s\n", cudaGetErrorString(error));
+            printf("CUDA error [After assign_data_points_to_centroids()]: %s\n", cudaGetErrorString(error));
             // reset color
             printf("\033[0m");
         }
 
-        // Copy data from device to host
-        cudaMemcpy(cluster_assignment, d_cluster_assignment, N * sizeof(int), cudaMemcpyDeviceToHost);
+        printf("Cluster assignment done successfully :D\n");
+        // cudaMemcpy(cluster_assignment,d_cluster_assignment, N * sizeof(int), cudaMemcpyDeviceToHost);
+        // for(int i = 0; i < 10; i++)
+        // {
+        //     printf("%d     ", cluster_assignment[i]);
+        // }
+        // break;
 
-        int *cluster_size = (int *)malloc(K * sizeof(int));
 
-        int *d_cluster_size = 0;
-        cudaMalloc(&d_cluster_size, K * sizeof(int));
 
-        float *updated_centroids = 0;
-        cudaMalloc(&updated_centroids, K * D * sizeof(float));
+        // update_cluster_centroids<<<num_blocks, THREADS_PER_BLOCK>>>(N, D, d_image, d_updated_centroids, d_cluster_assignment, d_cluster_sizes);
+        // cudaDeviceSynchronize();
+        // error = cudaGetLastError();
+        // if (error != cudaSuccess)
+        // {
+        //     // in red
+        //     printf("\033[1;31m");
+        //     printf("CUDA error [After update_cluster_centroids()]: %s\n", cudaGetErrorString(error));
+        //     // reset color
+        //     printf("\033[0m");
+        // }
 
-        float *d_updated_centroids = 0;
-        cudaMalloc(&d_updated_centroids, K * D * sizeof(float));
+        // if (iteration == 5)
+        // {
+        //     break;
+        // }
+        // // Copy data from device to host
+        // cudaMemcpy(updated_centroids, d_updated_centroids, K * D * sizeof(float), cudaMemcpyDeviceToHost);
+        // cudaMemcpy(cluster_size, d_cluster_size, K * sizeof(int), cudaMemcpyDeviceToHost);
 
-        update_cluster_centroids<<<num_blocks, THREADS_PER_BLOCK>>>(N, D, d_image, d_updated_centroids, d_cluster_assignment, d_cluster_size);
-        cudaDeviceSynchronize();
-        error = cudaGetLastError();
-        if (error != cudaSuccess)
-        {
-            // in red
-            printf("\033[1;31m");
-            printf("CUDA error: %s\n", cudaGetErrorString(error));
-            // reset color
-            printf("\033[0m");
-        }
+        // // check convergence
+        // int convergedCentroids = 0;
+        // for (int i = 0; i < K; i++)
+        // {
+        //     if (check_convergence(centroids + i * D, updated_centroids + i * D, N, D, K))
+        //     {
+        //         convergedCentroids++;
+        //     }
+        // }
+        // printf("Converged Centroids: %d\n", convergedCentroids);
+        // // if 80% of the centroids have converged
+        // if (convergedCentroids >= K * CONVERGENCE_PERCENTAGE / 100.0)
+        // {
+        //     printf("Converged\n");
+        //     break;
+        // }
 
-        // Copy data from device to host
-        cudaMemcpy(updated_centroids, d_updated_centroids, K * D * sizeof(float), cudaMemcpyDeviceToHost);
-        cudaMemcpy(cluster_size, d_cluster_size, K * sizeof(int), cudaMemcpyDeviceToHost);
-
-        // check convergence
-        int convergedCentroids = 0;
-        for (int i = 0; i < K; i++)
-        {
-            if (check_convergence(centroids + i * D, updated_centroids + i * D, N, D, K))
-            {
-                convergedCentroids++;
-            }
-        }
-        printf("Converged Centroids: %d\n", convergedCentroids);
-        // if 80% of the centroids have converged
-        if (convergedCentroids >= K * CONVERGENCE_PERCENTAGE / 100.0)
-        {
-            printf("Converged\n");
-            break;
-        }
-
-        // update the centroids
-        centroids = updated_centroids;
+        // // update the centroids
+        // centroids = updated_centroids;
     }
 
     // for (int i = 0; i < K; i++)
@@ -505,8 +439,8 @@ int main(int argc, char *argv[])
     printf("Cluster assignment done successfully :D\n");
     // for (int i = 0; i < N; i++)
     // {
-    printf("Image: %f \n", image[0]);
-    printf("Center: %d \n", cluster_assignment[0]);
+    // printf("Image: %f \n", image[0]);
+    // printf("Center: %d \n", cluster_assignment[0]);
     // }
 }
 
