@@ -21,7 +21,7 @@
 #define CONVERGENCE_PERCENTAGE 80
 
 const int K_max = 20;
-const int D=3;
+const int D = 3;
 int K = -1;
 
 __host__ float *read_image(char *path, int *width, int *height, int *channels)
@@ -94,16 +94,38 @@ cluster_assignment: cluster assignment for each data point
 
 returns: None
 */
+// Each thread in block its coreesponding centroid value [Colleased way]  (Small no of centroids os each thread load 1 dim of centroids)
 __global__ void assign_data_points_to_centroids(int N, int D, int K, float *d_data_points, float *d_centroids, int *d_cluster_assignment)
 {
+
+    // Shared Mmeory for Centroids
+    extern __shared__ float sh_centroids[];
+
+    // thread index in block level
+    const int block_tid = threadIdx.x;
+
     // thread index in grid level
     // each thread is responsible for 1 pixel
-    const int tid = blockIdx.x * blockDim.x + threadIdx.x;
+    const int grid_tid = blockIdx.x * blockDim.x + threadIdx.x;
+
+    // 1. Each Thread loads [Colleasing Way]
+    // No of elements to be loaded by 1 thread
+    int n_segments = (K * D + blockDim.x - 1) / blockDim.x; // ceil(K*D/THREADS_PER_BLOCK)
+
+    for (int i = 0; i < n_segments; i++)
+    {
+        // Check Boundary
+        if (block_tid + i * blockDim.x >= K * D)
+        {
+            break;
+        }
+        sh_centroids[block_tid + i * blockDim.x] = d_centroids[block_tid + i * blockDim.x];
+    }
 
     // check for out of bounds
     // if the thread index is greater than the number of data points
     // then return
-    if (tid >= N)
+    if (grid_tid >= N)
         return;
 
     float min_distance = FLT_MAX; // FLT_MAX represents the maximum finite floating-point value
@@ -112,7 +134,7 @@ __global__ void assign_data_points_to_centroids(int N, int D, int K, float *d_da
     for (int i = 0; i < K; i++)
     {
         // Compute the distance between the data point and the centroids
-        float dist = distance(d_data_points + tid * D, d_centroids + i * D, D);
+        float dist = distance(d_data_points + grid_tid * D, sh_centroids + i * D, D);
 
         if (dist < min_distance)
         {
@@ -122,7 +144,7 @@ __global__ void assign_data_points_to_centroids(int N, int D, int K, float *d_da
     }
 
     // Assign the data point to the nearest centroid
-    d_cluster_assignment[tid] = min_centroid;
+    d_cluster_assignment[grid_tid] = min_centroid;
 }
 
 /**
@@ -153,7 +175,7 @@ __global__ void update_cluster_centroids(int data_points_num, int dimensions_num
     const int block_tid = threadIdx.x;
 
     // Shared memory for reduction
-    __shared__ float shared_data_points[THREADS_PER_BLOCK*D];
+    __shared__ float shared_data_points[THREADS_PER_BLOCK * D];
     // each thread loads the data point to shared memory
     for (int i = 0; i < dimensions_num; i++)
     {
@@ -169,8 +191,8 @@ __global__ void update_cluster_centroids(int data_points_num, int dimensions_num
 
     if (block_tid == 0)
     {
-        float data_point_sum[K_max*D] = {0}; // sum of data points for each cluster
-        int cluster_size[K_max] = {0};     // temporary cluster size
+        float data_point_sum[K_max * D] = {0}; // sum of data points for each cluster
+        int cluster_size[K_max] = {0};         // temporary cluster size
 
         // for each data point, check its cluster assignment
         // and add the data point to the corresponding cluster
@@ -375,6 +397,7 @@ int main(int argc, char *argv[])
     cudaMemcpy(d_image, image, N * D * sizeof(float), cudaMemcpyHostToDevice);
 
     int num_blocks = (N + THREADS_PER_BLOCK - 1) / THREADS_PER_BLOCK; // ceil(N/THREADS_PER_BLOCK)
+    // unsigned long long sh_mem_centroids_size = K * D * sizeof(float);
 
     int iteration = 0;
     // Compute Time
@@ -391,7 +414,8 @@ int main(int argc, char *argv[])
         cudaMemcpy(d_centroids, centroids, K * D * sizeof(float), cudaMemcpyHostToDevice);
 
         // call the kernel [assign_data_points_to_centroids]
-        assign_data_points_to_centroids<<<num_blocks, THREADS_PER_BLOCK>>>(N, D, K, d_image, d_centroids, d_cluster_assignment);
+        // int shared_m
+        assign_data_points_to_centroids<<<num_blocks, THREADS_PER_BLOCK, K * D * sizeof(float)>>>(N, D, K, d_image, d_centroids, d_cluster_assignment);
 
         cudaDeviceSynchronize();
         cudaError_t error = cudaGetLastError();
@@ -497,7 +521,6 @@ int main(int argc, char *argv[])
     end = clock();
     time_used = ((double)(end - start)) / CLOCKS_PER_SEC;
 
-
     // Copy Assigments
     cudaMemcpy(cluster_assignment, d_cluster_assignment, N * sizeof(int), cudaMemcpyDeviceToHost);
 
@@ -520,5 +543,5 @@ int main(int argc, char *argv[])
     return 0;
 }
 
-// nvcc -o out_gpu_3  ./gpu_3.cu
-// ./out_gpu_3 .\tests\image_3.png 5
+// nvcc -o out_gpu_3_1  ./gpu_3_1.cu
+// ./out_gpu_3_1 .\tests\image_3.png 5
