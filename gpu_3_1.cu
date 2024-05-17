@@ -17,7 +17,7 @@
 
 #define THREADS_PER_BLOCK 32
 #define EPSILON 0.0001
-#define MAX_ITERATIONS 1
+#define MAX_ITERATIONS 100
 #define CONVERGENCE_PERCENTAGE 80
 
 const int K_max = 20;
@@ -232,7 +232,8 @@ __host__ float *intilize_centroids(int N, int D, int K, float *data_points)
 
     returns: centroids as a 1D array
     */
-    srand(50); // Seed for randomization
+    // srand(42); // Seed for randomization
+    srand(time(NULL)); // Seed for randomization
 
     float *centroids = (float *)malloc(K * D * sizeof(float));
     for (int i = 0; i < K; i++)
@@ -545,3 +546,4 @@ int main(int argc, char *argv[])
 
 // nvcc -o out_gpu_3_1  ./gpu_3_1.cu
 // ./out_gpu_3_1 .\tests\image_3.png 5
+// D:\Parallel-Computing-Project>nvprof -o ./profiles/out_gpu_3_1.nvprof ./out_gpu_3_1 ./tests/image_3.png 5

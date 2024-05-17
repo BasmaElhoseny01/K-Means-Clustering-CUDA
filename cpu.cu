@@ -308,7 +308,6 @@ __host__ unsigned char *clutser_image(float *image, int width, int height, int c
     unsigned char *clustered_image = (unsigned char *)malloc(sizeof(unsigned char) * height * width * 3);
     // float *clustered_image = (float *)malloc(sizeof(float) * height * width * 3);
 
-
     // Generate Cluster Colors
     int **cluster_color = generate_cluster_color();
     printf("Cluster Colors Generated\n");

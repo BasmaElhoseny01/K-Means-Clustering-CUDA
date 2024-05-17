@@ -522,3 +522,5 @@ int main(int argc, char *argv[])
 
 // nvcc -o out_gpu_3  ./gpu_3.cu
 // ./out_gpu_3 .\tests\image_3.png 5
+
+// D:\Parallel-Computing-Project>nvprof -o ./profiles/out_gpu_3.nvprof ./out_gpu_3 ./tests/image_3.png 5
