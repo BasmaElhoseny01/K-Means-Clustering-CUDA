@@ -171,9 +171,6 @@ __global__ void update_cluster_centroids(int data_points_num, int dimensions_num
     if (grid_tid >= data_points_num)
         return;
 
-    // printf("%d ", d_cluster_assignment[grid_tid]);
-    // return;
-
     // thread index in block level
     const int block_tid = threadIdx.x;
 
@@ -181,27 +178,13 @@ __global__ void update_cluster_centroids(int data_points_num, int dimensions_num
     __shared__ float sh_data_point_sum[K_max * D]; // sum of data points for each cluster
     __shared__ int sh_cluster_size[K_max];         // temporary cluster size
 
-    // Initialize shared memory array [Each Thread init one]  [FIX][NO OF Threads<K_max*D so that each thraed loads only 1]
     // Initialize shared memory array
-    // if (threadIdx.x == 0)
-    // {
-    //     for (int i = 0; i < K_max * D; ++i)
-    //     {
-    //         sh_data_point_sum[i] = 0.0f;
-    //     }
-    //     for (int i = 0; i < K_max; ++i)
-    //     {
-    //         sh_cluster_size[i] = 0.0f;
-    //     }
-    // }
-    // __syncthreads();
-
-    if (block_tid < K)
+    if (block_tid < K * D)
     {
-        sh_cluster_size[block_tid] = 0.0;
-        if (block_tid < K * D)
+        sh_data_point_sum[block_tid] = 0.0;
+        if (block_tid < K)
         {
-            sh_data_point_sum[block_tid] = 0.0;
+            sh_cluster_size[block_tid] = 0.0;
         }
     }
     __syncthreads();
@@ -229,7 +212,6 @@ __global__ void update_cluster_centroids(int data_points_num, int dimensions_num
     //         }
     //     }
     // }
-
     if (threadIdx.x < K * dimensions_num)
     {
         if (threadIdx.x < K)
@@ -459,6 +441,7 @@ int main(int argc, char *argv[])
 
         // Reset the cluster sizes
         cudaMemset(d_cluster_sizes, 0, K * sizeof(int));
+        cudaMemset(d_centroids, 0, K * D * sizeof(float)); // I see it is very important to reset the centroids but removing it will not affect the results ??!!!
 
         update_cluster_centroids<<<num_blocks, THREADS_PER_BLOCK>>>(N, D, d_image, d_cluster_assignment, d_centroids, d_cluster_sizes, K);
         cudaDeviceSynchronize();
@@ -494,7 +477,7 @@ int main(int argc, char *argv[])
                 new_centroids[i * D + j] /= cluster_sizes[i];
             }
         }
-        // printf("Centroids updated successfully :D\n");
+        printf("Centroids updated successfully :D\n");
         // printf("*************************\n");
         // // Print old and new centroids
         // printf("Old Centroids\n");
@@ -568,3 +551,4 @@ int main(int argc, char *argv[])
 
 // nvcc -o out_gpu_3_2  ./gpu_3_2.cu
 // ./out_gpu_3_2 .\tests\image_3.png 5
+// D:\Parallel-Computing-Project>nvprof -o ./profiles/out_gpu_3_2.nvprof ./out_gpu_3_2 ./tests/image_3.png 5
