@@ -367,7 +367,7 @@ int main(int argc, char *argv[])
     // Input Arguments
     if (argc < 2)
     {
-        printf("Usage: %s <input_file> <K>", argv[0]);
+        printf("Usage: %s <input_file> <K1> <K2> .. <Kn>", argv[0]);
         exit(1);
     }
 
