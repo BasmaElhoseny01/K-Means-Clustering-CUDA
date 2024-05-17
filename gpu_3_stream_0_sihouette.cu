@@ -286,7 +286,7 @@ __device__ __host__ float compute_inter_cluster_distance(int point_idx, float *d
         }
     }
 
-    float inter_cluster_distance = FLT_MAX;
+    float inter_cluster_distance = 0;
     int count = 0;
 
     // Compute distance between data_points[point_idx] and all other points in the nearest centroid cluster
@@ -325,20 +325,29 @@ __global__ void compute_shetollute_score(float *d_data_points, int *d_cluster_as
     // thread in grid level
     const int grid_tid = blockIdx.x * blockDim.x + threadIdx.x;
 
-    // check for out of bounds
-    if (grid_tid >= N)
-        return;
-
     // thread index in block level
     const int block_tid = threadIdx.x;
 
     __shared__ float sh_shilloute_scores[THREADS_PER_BLOCK];
+
+    // check for out of bounds
+    if (grid_tid >= N)
+    {
+        // Add 0 to the shared memory
+        sh_shilloute_scores[block_tid] = 0;
+        return;
+    }
 
     // Compute the average distance of the data point to all other points in the same cluster
     float a = compute_intra_cluster_distance(grid_tid, d_data_points, d_cluster_assignment, N, D, K);
     // Compute the average distance of the data point to all other points in the nearest cluster
     float b = compute_inter_cluster_distance(grid_tid, d_data_points, d_cluster_assignment, d_centroids, N, D, K);
     float shilloute_score = (b - a) / max(a, b);
+
+    // if (block_tid == 0)
+    // {
+    //     printf("Data Point: %d, a: %f, b: %f, shilloute_score: %f\n", grid_tid, a, b, shilloute_score);
+    // }
 
     // Store the shilloute score in shared memory
     sh_shilloute_scores[block_tid] = shilloute_score;
@@ -352,6 +361,7 @@ __global__ void compute_shetollute_score(float *d_data_points, int *d_cluster_as
         float sum = 0;
         for (int i = 0; i < blockDim.x; i++)
         {
+            // printf("%f ", sh_shilloute_scores[i]);
             sum += sh_shilloute_scores[i];
         }
 
@@ -740,14 +750,32 @@ int main(int argc, char *argv[])
     {
         printf("Computing Shilloute Score ....\n");
     }
+
+    // // Make cluter assignment random
+    // for (int i = 0; i < N; i++)
+    // {
+    //     cluster_assignment[i] = rand() % K;
+    // }
+    // Copy to device
+    // cudaMemcpy(d_cluster_assignment, cluster_assignment, N * sizeof(int), cudaMemcpyHostToDevice);
     compute_shetollute_score<<<num_blocks, THREADS_PER_BLOCK>>>(d_image, d_cluster_assignment, d_centroids, N, D, K, d_shilloute_scores);
+    cudaDeviceSynchronize();
+    error = cudaGetLastError();
+    if (error != cudaSuccess)
+    {
+        // in red
+        printf("\033[1;31m");
+        printf("CUDA error [After compute_shetollute_score()]: %s\n", cudaGetErrorString(error));
+        // reset color
+        printf("\033[0m");
+    }
 
     // Copy Shilloute Scores To Host
-    cudaMemcpy(shilloute_scores, d_shilloute_scores, N * sizeof(float), cudaMemcpyDeviceToHost);
+    cudaMemcpy(shilloute_scores, d_shilloute_scores, num_blocks * sizeof(float), cudaMemcpyDeviceToHost);
 
     // Compute the average shilloute score
     float shetollute_score = 0;
-    for (int i = 0; i < N; i++)
+    for (int i = 0; i < num_blocks; i++)
     {
         shetollute_score += shilloute_scores[i];
     }
