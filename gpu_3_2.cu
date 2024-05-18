@@ -478,7 +478,7 @@ int main(int argc, char *argv[])
                 new_centroids[i * D + j] /= cluster_sizes[i];
             }
         }
-        printf("Centroids updated successfully :D\n");
+        // printf("Centroids updated successfully :D\n");
         // printf("*************************\n");
         // // Print old and new centroids
         // printf("Old Centroids\n");
@@ -510,26 +510,26 @@ int main(int argc, char *argv[])
                 convergedCentroids++;
             }
         }
-        printf("Converged Centroids: %d\n", convergedCentroids);
-        // if 80% of the centroids have converged
-        if (convergedCentroids >= K * CONVERGENCE_PERCENTAGE / 100.0)
-        {
-            printf("Converged after %d iterations\n", iteration);
-            break;
-        }
+        // printf("Converged Centroids: %d\n", convergedCentroids);
+        // // if 80% of the centroids have converged
+        // if (convergedCentroids >= K * CONVERGENCE_PERCENTAGE / 100.0)
+        // {
+        //     printf("Converged after %d iterations\n", iteration);
+        //     break;
+        // }
 
         // Update centroids
         centroids = new_centroids;
     }
-    if (iteration == MAX_ITERATIONS)
-    {
-        printf("Max Iterations reached :( \n");
-    }
-    end = clock();
-    time_used = ((double)(end - start)) / CLOCKS_PER_SEC;
+    // if (iteration == MAX_ITERATIONS)
+    // {
+    //     printf("Max Iterations reached :( \n");
+    // }
 
     // Copy Assigments
     cudaMemcpy(cluster_assignment, d_cluster_assignment, N * sizeof(int), cudaMemcpyDeviceToHost);
+    end = clock();
+    time_used = ((double)(end - start)) / CLOCKS_PER_SEC;
 
     // // Cluster Assignments
     // printf("*************************\n");
