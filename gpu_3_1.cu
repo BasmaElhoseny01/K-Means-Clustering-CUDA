@@ -234,8 +234,8 @@ __host__ float *intilize_centroids(int N, int D, int K, float *data_points)
 
     returns: centroids as a 1D array
     */
-    // srand(42); // Seed for randomization
-    srand(time(NULL)); // Seed for randomization
+    srand(42); // Seed for randomization
+    // srand(time(NULL)); // Seed for randomization
 
     float *centroids = (float *)malloc(K * D * sizeof(float));
     for (int i = 0; i < K; i++)
