@@ -212,7 +212,8 @@ __host__ float *intilize_centroids(int N, int D, int K, float *data_points)
 
     returns: centroids as a 1D array
     */
-    srand(time(NULL)); // Seed for randomization
+    // srand(time(NULL)); // Seed for randomization
+    srand(42); // Seed for reproducibility
 
     float *centroids = (float *)malloc(K * D * sizeof(float));
     for (int i = 0; i < K; i++)
@@ -528,7 +529,7 @@ int main(int argc, char *argv[])
 
     // Save the clustered image
     std::string input_path(input_file_path);
-    std::string output_path = input_path.substr(0, input_path.find_last_of('.')) + "_output_gpu.png";
+    std::string output_path = input_path.substr(0, input_path.find_last_of('.')) + "_output_gpu_3.png";
     stbi_write_png(output_path.c_str(), width, height, 3, clutsered_image, width * 3);
     printf("Image saved successfully at: %s\n", output_path.c_str());
 
