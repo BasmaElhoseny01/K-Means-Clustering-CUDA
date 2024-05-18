@@ -163,14 +163,11 @@ __host__ int *assign_data_points_to_centroids(int N, int D, int K, float *data_p
         cluster_assignment[i] = min_centroid;
     }
 
-    if (DEBUG)
-    {
-        printf("Cluster assignment done successfully :D\n");
-        // for (int i = 0; i < N; i++)
-        // {
-        //     printf("%d ", cluster_assignment[i]);
-        // }
-    }
+    // printf("Cluster assignment done successfully :D\n");
+    // for (int i = 0; i < N; i++)
+    // {
+    //     printf("%d ", cluster_assignment[i]);
+    // }
 
     return cluster_assignment;
 }
@@ -234,31 +231,28 @@ __host__ float *update_centroids(int N, int D, int K, float *data_points, float 
         }
     }
 
-    if (DEBUG)
-    {
-        // printf("*************************\n");
-        printf("Centroids updated successfully :D\n");
-        // // Print old and new centroids
-        // printf("Old Centroids\n");
-        // for (int i = 0; i < K; i++)
-        // {
-        //     for (int j = 0; j < D; j++)
-        //     {
-        //         printf("%f ", centroids[i * D + j]);
-        //     }
-        //     printf("\n");
-        // }
-        // printf("\nNew Centroids\n");
-        // for (int i = 0; i < K; i++)
-        // {
-        //     for (int j = 0; j < D; j++)
-        //     {
-        //         printf("%f ", new_centroids[i * D + j]);
-        //     }
-        //     printf("\n");
-        // }
-        // printf("*************************\n");
-    }
+    // printf("*************************\n");
+    // printf("Centroids updated successfully :D\n");
+    // // Print old and new centroids
+    // printf("Old Centroids\n");
+    // for (int i = 0; i < K; i++)
+    // {
+    //     for (int j = 0; j < D; j++)
+    //     {
+    //         printf("%f ", centroids[i * D + j]);
+    //     }
+    //     printf("\n");
+    // }
+    // printf("\nNew Centroids\n");
+    // for (int i = 0; i < K; i++)
+    // {
+    //     for (int j = 0; j < D; j++)
+    //     {
+    //         printf("%f ", new_centroids[i * D + j]);
+    //     }
+    //     printf("\n");
+    // }
+    // printf("*************************\n");
 
     return new_centroids;
 }
@@ -447,10 +441,7 @@ __host__ unsigned char *clutser_image(float *image, int width, int height, int c
             clustered_image[i * 3 + j] = cluster_color[cluster_assignment[i]][j];
         }
     }
-    if (DEBUG)
-    {
-        printf("Image clustered successfully :D\n");
-    }
+    printf("Image clustered successfully :D\n");
 
     // Write Image
     return clustered_image;
@@ -479,10 +470,8 @@ int main(int argc, char *argv[])
 
     char *input_file_path = argv[1];
     K = atoi(argv[2]);
-    if (true)
-    {
-        printf("Input file path: %s\n", input_file_path);
-    }
+
+    printf("Input file path: %s\n", input_file_path);
 
     // Read image
     int width, height, channels;
@@ -505,10 +494,7 @@ int main(int argc, char *argv[])
     while (iteration < MAX_ITERATIONS)
     {
         iteration = iteration + 1;
-        if (DEBUG)
-        {
-            printf("Iteration: %d/%d\n", iteration, MAX_ITERATIONS);
-        }
+        // printf("Iteration: %d/%d\n", iteration, MAX_ITERATIONS);
 
         // Assign each data point to the nearest centroid
         cluster_assignment = assign_data_points_to_centroids(N, D, K, image, centroids);
@@ -525,17 +511,9 @@ int main(int argc, char *argv[])
                 convergedCentroids++;
             }
         }
-        if (DEBUG)
-        {
-            printf("Converged Centroids: %d\n", convergedCentroids);
-        }
         // if 80% of the centroids have converged
         if (convergedCentroids >= K * CONVERGENCE_PERCENTAGE / 100.0)
         {
-            if (DEBUG)
-            {
-                printf("Converged after %d iterations\n", iteration);
-            }
             break;
         }
 
@@ -544,10 +522,8 @@ int main(int argc, char *argv[])
     }
 
     // Compute Shilloute Score :D [Very Expensive]
-    if (DEBUG)
-    {
-        printf("Computing Shilloute Score ....\n");
-    }
+    printf("Computing Shilloute Score ....\n");
+    
     float shetollute_score = compute_shetollute_score(image, cluster_assignment, N, D, K);
 
     // Stop the timer
