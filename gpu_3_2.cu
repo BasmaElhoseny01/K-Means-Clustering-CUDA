@@ -394,9 +394,6 @@ int main(int argc, char *argv[])
     float *d_centroids = 0;
     int *d_cluster_assignment = 0;
     int *d_cluster_sizes = 0;
-    clock_t start, end;
-    double time_used;
-    start = clock();
 
     cudaMalloc(&d_image, N * D * sizeof(float));
     cudaMalloc(&d_centroids, K * D * sizeof(float));
