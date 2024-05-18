@@ -389,7 +389,7 @@ int main(int argc, char *argv[])
     {
         // print the current
         iteration++;
-        printf("Iteration: %d/%d\n", iteration, MAX_ITERATIONS);
+        // printf("Iteration: %d/%d\n", iteration, MAX_ITERATIONS);
 
         // Copy data from host to device [centroids]
         cudaMemcpy(d_centroids, centroids, K * D * sizeof(float), cudaMemcpyHostToDevice);
