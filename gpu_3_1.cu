@@ -15,7 +15,7 @@
 #define STB_IMAGE_WRITE_IMPLEMENTATION
 #include "stb_image_write.h"
 
-#define DEBUG 1
+#define DEBUG 0
 
 #define THREADS_PER_BLOCK 32
 #define EPSILON 0.0001
@@ -433,10 +433,12 @@ int main(int argc, char *argv[])
 
         // printf("Cluster assignment done successfully :D\n");
         // cudaMemcpy(cluster_assignment, d_cluster_assignment, N * sizeof(int), cudaMemcpyDeviceToHost); // [FOR DEGUB]
-        // for (int i = 0; i < N; i++)
+        // for (int i = N - 1; i > N - 50; i--)
+
         // {
         //     printf("%d ", cluster_assignment[i]);
         // }
+        // return 0;
 
         // Reset the cluster sizes
         cudaMemset(d_cluster_sizes, 0, K * sizeof(int));

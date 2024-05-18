@@ -15,7 +15,7 @@
 #define STB_IMAGE_WRITE_IMPLEMENTATION
 #include "stb_image_write.h"
 
-#define DEBUG 1
+#define DEBUG 0
 
 #define THREADS_PER_BLOCK 32
 #define EPSILON 0.0001
@@ -389,7 +389,7 @@ int main(int argc, char *argv[])
     {
         // print the current
         iteration++;
-        // printf("Iteration: %d/%d\n", iteration, MAX_ITERATIONS);
+        printf("Iteration: %d/%d\n", iteration, MAX_ITERATIONS);
 
         // Copy data from host to device [centroids]
         cudaMemcpy(d_centroids, centroids, K * D * sizeof(float), cudaMemcpyHostToDevice);
@@ -410,9 +410,9 @@ int main(int argc, char *argv[])
 
         // printf("Cluster assignment done successfully :D\n");
         // cudaMemcpy(cluster_assignment, d_cluster_assignment, N * sizeof(int), cudaMemcpyDeviceToHost); // [FOR DEGUB]
-        // for (int i = 0; i < N; i++)
+        // for (int i = 0; i < 20; i++)
         // {
-        //     printf("%d ", cluster_assignment[i]);
+        //     printf("%d\n", cluster_assignment[i]);
         // }
 
         // Reset the cluster sizes
@@ -451,6 +451,13 @@ int main(int argc, char *argv[])
                 new_centroids[i * D + j] /= cluster_sizes[i];
             }
         }
+        // print cluster sizes
+        // for (int i = 0; i < K; i++)
+        // {
+        //     printf("%d ", cluster_sizes[i]);
+        // }
+        // printf?("\n");
+        // return 0;
         // printf("Centroids updated successfully :D\n");
         // printf("*************************\n");
         // // Print old and new centroids
@@ -473,6 +480,8 @@ int main(int argc, char *argv[])
         //     printf("\n");
         // }
         // printf("*************************\n");
+
+        // return 0;
 
         // check convergence
         int convergedCentroids = 0;

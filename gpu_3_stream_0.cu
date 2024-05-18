@@ -9,7 +9,7 @@
 #include <time.h>
 #include <float.h>
 
-#define DEBUG 1
+#define DEBUG 0
 
 #define STB_IMAGE_IMPLEMENTATION
 #include "stb_image.h"
@@ -431,7 +431,7 @@ int main(int argc, char *argv[])
         cudaMemcpyAsync(d_image + start * D, image + start * D, Nsegment * D * sizeof(float), cudaMemcpyHostToDevice, streams[s]);
 
         // call the kernel [assign_data_points_to_centroids]
-        assign_data_points_to_centroids<<<num_blocks, THREADS_PER_BLOCK, K * D * sizeof(float), streams[s]>>>(Nsegment, D, K, d_image + start, d_centroids, d_cluster_assignment + start);
+        assign_data_points_to_centroids<<<num_blocks, THREADS_PER_BLOCK, K * D * sizeof(float), streams[s]>>>(Nsegment, D, K, d_image + start * D, d_centroids, d_cluster_assignment + start);
     }
 
     cudaDeviceSynchronize();
@@ -445,12 +445,15 @@ int main(int argc, char *argv[])
         printf("\033[0m");
     }
 
+    // printf("segmentSize: %d\n", segmentSize);
     // printf("Cluster assignment done successfully :D\n");
     // cudaMemcpy(cluster_assignment, d_cluster_assignment, N * sizeof(int), cudaMemcpyDeviceToHost); // [FOR DEGUB]
-    // for (int i = 0; i < N; i++)
+    // // for (int i = N-1; i > N-50; i--)
+    // for (int i = 9020; i < 9060; i++)
     // {
     //     printf("%d ", cluster_assignment[i]);
     // }
+    // return 0;
 
     int iteration = 0;
     while (iteration < MAX_ITERATIONS)
@@ -519,6 +522,8 @@ int main(int argc, char *argv[])
         //     printf("\n");
         // }
         // printf("*************************\n");
+
+        // return 0;
 
         // check convergence
         int convergedCentroids = 0;
