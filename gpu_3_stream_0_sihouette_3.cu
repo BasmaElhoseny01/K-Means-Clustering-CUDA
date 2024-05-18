@@ -19,8 +19,8 @@
 
 const int DEBUG = 0;
 
-// #define THREADS_PER_BLOCK 32
 #define THREADS_PER_BLOCK 32
+#define SHARED_MEMORY_SIZE 1024
 #define NUMOFSTREAMS 32
 #define EPSILON 1e-4
 #define MAX_ITERATIONS 100
@@ -329,11 +329,7 @@ __global__ void compute_shetollute_score(float *d_data_points, int *d_cluster_as
     // thread index in block level
     const int block_tid = threadIdx.x;
 
-    // Segment in global memory
-    int segment = 2 * blockIdx.x * blockDim.x;
-    //////////////////////CONTNUE FROM HERE///////////////////////////
-
-    __shared__ float sh_shilloute_scores[2 * THREADS_PER_BLOCK];
+    __shared__ float sh_shilloute_scores[THREADS_PER_BLOCK];
 
     // check for out of bounds
     if (grid_tid >= N)
@@ -343,39 +339,142 @@ __global__ void compute_shetollute_score(float *d_data_points, int *d_cluster_as
         return;
     }
 
-    // Compute the average distance of the data point to all other points in the same cluster
-    float a = compute_intra_cluster_distance(grid_tid, d_data_points, d_cluster_assignment, N, D, K);
-    // Compute the average distance of the data point to all other points in the nearest cluster
-    float b = compute_inter_cluster_distance(grid_tid, d_data_points, d_cluster_assignment, d_centroids, N, D, K);
-    float shilloute_score = (b - a) / max(a, b);
+    // [TODO] Parallelize this part make use of data reuse :D
+    __shared__ float sh_data_points[3 * SHARED_MEMORY_SIZE]; // to store the data points in shared memory
 
-    // if (block_tid == 0)
+    // No of loads to load all data points
+    int segment_size = 3 * SHARED_MEMORY_SIZE;                  // ceil(N*3/n_segments)
+    int n_segments = (N * 3 + segment_size - 1) / segment_size; // ceil(N*3/segment_size)
+    // no Loads per thread
+    int points_per_thread = (n_segments + blockDim.x - 1) / blockDim.x; // ceil(n_segments/THREADS_PER_BLOCK)
+
+    // data_points |-----------segment_size---------------|---------------segment_size-----------------|----------------segment_size-----------------|
+    for (int segment = 0; segment < n_segments; segment++)
+    {
+        // Step(1) Load Data Points
+        // Load Data Points Segment
+        // |*---------------segment_size--------------------|
+        int start = block_tid + segment * segment_size;
+
+        // |*-----blockDim.x-----|*-------blockDim.x-------|
+        for (int i = 0; i < points_per_thread; i++)
+        {
+            // Load Data Points Segment
+
+            // Step(1) Load Data Points
+            // Each thread loads its corresponding data point
+            // Check Boundary
+            if (start + i * blockDim.x >= N * 3)
+            {
+                break;
+            }
+            sh_data_points[block_tid + i * blockIdx.x] = d_data_points[start + i * blockDim.x];
+        }
+
+        __syncthreads();
+
+        // Step(2) Compute
+        for (int i = 0; i < points_per_thread; i++)
+        {
+            // Compute Distance to all other points in the same cluster [Loaded till now]
+            
+            // // Load Data Points Segment
+
+            // // Step(1) Load Data Points
+            // // Each thread loads its corresponding data point
+            // // Check Boundary
+            // if (start + i * blockDim.x >= N * 3)
+            // {
+            //     break;
+            // }
+            // sh_data_points[block_tid + i * blockIdx.x] = d_data_points[start + i * blockDim.x];
+        }
+    }
+
+    // // for (int i = 0; i < n_segments; i++)
+    // // {
+    // //     // Segement By Segment
+    // //     // Each thread loads its corresponding data point
+    // //     // Check Boundary
+    // //     // if (block_tid + i * blockDim.x >= N * 3)
+    // //     // {
+    // //     //     break;
+    // //     // }
+    // //     for (int j = 0; j < D; j++)
+    // //     {
+    // //         sh_data_points[block_tid + i * blockDim.x] = d_data_points[block_tid + i * blockDim.x];
+    // //     }
+    // //     sh_data_points[block_tid ] = d_data_points[block_tid + i * blockDim.x];
+
+    // //     //     // Check Boundary
+    // //     //     if (block_tid + i * blockDim.x >= N * 3)
+    // //     //     {
+    // //     //         break;
+    // //     //     }
+    // //     //     sh_data_points[block_tid + i * blockDim.x] = d_data_points[block_tid + i * blockDim.x];
+    // // }
+
+    // // // Each thread loads its corresponding data point
+    // // if (grid_tid < N)
+    // // {
+    // //     for (int i = 0; i < D; i++)
+    // //     {
+    // //         sh_data_points[block_tid * D + i] = d_data_points[grid_tid * D + i];
+    // //     }
+    // // }
+
+    // // __syncthreads();
+
+    // // int start = block_tid; // Start from the thread index
+
+    // // for (int i = 0; i < n_segments; i++)
+    // // {
+    // //     // Load Data Points Segment
+
+    // //     // Step(1) Load Data Points
+    // //     // Each thread loads its corresponding data point
+
+    // //     if (block_tid + i * 3 * SHARED_MEMORY_SIZE < N * 3)
+    // //     {
+    // //         sh_data_points[block_tid + i * 3 * SHARED_MEMORY_SIZE] = d_data_points[block_tid + i * 3 * SHARED_MEMORY_SIZE];
+    // //     }
+
+    // //     // Step(2) Compute the average distance of the data point to all other points in the same cluster
+    // // }
+
+    // // Compute the average distance of the data point to all other points in the same cluster
+    // float a = compute_intra_cluster_distance(grid_tid, d_data_points, d_cluster_assignment, N, D, K);
+    // // Compute the average distance of the data point to all other points in the nearest cluster
+    // float b = compute_inter_cluster_distance(grid_tid, d_data_points, d_cluster_assignment, d_centroids, N, D, K);
+    // float shilloute_score = (b - a) / max(a, b);
+
+    // // if (block_tid == 0)
+    // // {
+    // //     printf("Data Point: %d, a: %f, b: %f, shilloute_score: %f\n", grid_tid, a, b, shilloute_score);
+    // // }
+
+    // // Store the shilloute score in shared memory
+    // sh_shilloute_scores[block_tid] = shilloute_score;
+    // // d_shilloute_scores_sum[grid_tid] = shilloute_score;
+
+    // __syncthreads();
+
+    // // Compute the sum of shilloute scores in the block
+    // // Reduction Sum
+    // for (int stride = blockDim.x / 2; stride > 0; stride /= 2)
     // {
-    //     printf("Data Point: %d, a: %f, b: %f, shilloute_score: %f\n", grid_tid, a, b, shilloute_score);
+    //     if (block_tid < stride)
+    //     {
+    //         sh_shilloute_scores[block_tid] += sh_shilloute_scores[block_tid + stride];
+    //     }
+    //     __syncthreads();
     // }
 
-    // Store the shilloute score in shared memory
-    sh_shilloute_scores[block_tid] = shilloute_score;
-    // d_shilloute_scores_sum[grid_tid] = shilloute_score;
-
-    __syncthreads();
-
-    // Compute the sum of shilloute scores in the block
-    // Reduction Sum
-    for (int stride = blockDim.x / 2; stride > 0; stride /= 2)
-    {
-        if (block_tid < stride)
-        {
-            sh_shilloute_scores[block_tid] += sh_shilloute_scores[block_tid + stride];
-        }
-        __syncthreads();
-    }
-
-    // Store the sum of shilloute scores in the global memory
-    if (block_tid == 0)
-    {
-        d_shilloute_scores_sum[blockIdx.x] = sh_shilloute_scores[0];
-    }
+    // // Store the sum of shilloute scores in the global memory
+    // if (block_tid == 0)
+    // {
+    //     d_shilloute_scores_sum[blockIdx.x] = sh_shilloute_scores[0];
+    // }
 }
 
 __host__ float *intilize_centroids(int N, int D, int K, float *data_points)
@@ -766,7 +865,6 @@ int main(int argc, char *argv[])
     // }
     // Copy to device
     // cudaMemcpy(d_cluster_assignment, cluster_assignment, N * sizeof(int), cudaMemcpyHostToDevice);
-    num_blocks = (N + THREADS_PER_BLOCK * 2 - 1) / THREADS_PER_BLOCK * 2; // ceil(N/THREADS_PER_BLOCK)
     compute_shetollute_score<<<num_blocks, THREADS_PER_BLOCK>>>(d_image, d_cluster_assignment, d_centroids, N, D, K, d_shilloute_scores);
     cudaDeviceSynchronize();
     error = cudaGetLastError();
@@ -836,6 +934,6 @@ int main(int argc, char *argv[])
     return 0;
 }
 
-// nvcc -o out_gpu_3_stream_0_sihouette_2  ./gpu_3_stream_0_sihouette_2.cu
-// ./out_gpu_3_stream_0_sihouette_2 .\tests\image_3.png 5
-// D:\Parallel-Computing-Project>nvprof -o ./profiles/out_gpu_3_stream_0_sihouette_2.nvprof ./out_gpu_3_stream_0_sihouette_2 ./tests/image_3.png 5
+// nvcc -o out_gpu_3_stream_0_sihouette_3  ./gpu_3_stream_0_sihouette_3.cu
+// ./out_gpu_3_stream_0_sihouette_3 .\tests\image_3.png 5
+// D:\Parallel-Computing-Project>nvprof -o ./profiles/out_gpu_3_stream_0_sihouette_3.nvprof ./out_gpu_3_stream_0_sihouette_3 ./tests/image_3.png 5
