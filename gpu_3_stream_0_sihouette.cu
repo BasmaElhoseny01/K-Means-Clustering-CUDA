@@ -529,10 +529,7 @@ int main(int argc, char *argv[])
     char *input_file_path = argv[1];
     K = atoi(argv[2]);
 
-    if (true)
-    {
-        printf("Input file path: %s\n", input_file_path);
-    }
+    printf("Input file path: %s\n", input_file_path);
 
     // Read image
     int width, height, channels;
@@ -545,7 +542,7 @@ int main(int argc, char *argv[])
     float *centroids = intilize_centroids(N, D, K, image);
     int *cluster_assignment = (int *)malloc(N * sizeof(int));
     int *cluster_sizes = (int *)malloc(K * sizeof(int));          // Array to store the size of each cluster
-    float *shilloute_scores = (float *)malloc(N * sizeof(float)); // Array to store the size of each cluster
+    float *shilloute_scores = (float *)malloc(N * sizeof(float)); // Array to silhuotte Scores
 
     // Device Memory Allocation
     float *d_image = 0;
@@ -590,7 +587,7 @@ int main(int argc, char *argv[])
         cudaMemcpyAsync(d_image + start * D, image + start * D, Nsegment * D * sizeof(float), cudaMemcpyHostToDevice, streams[s]);
 
         // call the kernel [assign_data_points_to_centroids]
-        assign_data_points_to_centroids<<<num_blocks, THREADS_PER_BLOCK, K * D * sizeof(float), streams[s]>>>(Nsegment, D, K, d_image + start, d_centroids, d_cluster_assignment + start);
+        assign_data_points_to_centroids<<<num_blocks, THREADS_PER_BLOCK, K * D * sizeof(float), streams[s]>>>(Nsegment, D, K, d_image + start * D, d_centroids, d_cluster_assignment + start);
     }
 
     cudaDeviceSynchronize();
@@ -604,25 +601,19 @@ int main(int argc, char *argv[])
         printf("\033[0m");
     }
 
-    if (DEBUG)
-    {
-        printf("Cluster assignment done successfully :D\n");
-        // cudaMemcpy(cluster_assignment, d_cluster_assignment, N * sizeof(int), cudaMemcpyDeviceToHost); // [FOR DEGUB]
-        // for (int i = 0; i < N; i++)
-        // {
-        //     printf("%d ", cluster_assignment[i]);
-        // }
-    }
+    // printf("Cluster assignment done successfully :D\n");
+    // cudaMemcpy(cluster_assignment, d_cluster_assignment, N * sizeof(int), cudaMemcpyDeviceToHost); // [FOR DEGUB]
+    // for (int i = 0; i < N; i++)
+    // {
+    //     printf("%d ", cluster_assignment[i]);
+    // }
+
     int iteration = 0;
     while (iteration < MAX_ITERATIONS)
     {
         // print the current
         iteration++;
-
-        if (DEBUG)
-        {
-            printf("Iteration: %d/%d\n", iteration, MAX_ITERATIONS);
-        }
+        // printf("Iteration: %d/%d\n", iteration, MAX_ITERATIONS);
 
         // Reset the cluster sizes
         cudaMemset(d_cluster_sizes, 0, K * sizeof(int));
@@ -663,31 +654,28 @@ int main(int argc, char *argv[])
             }
         }
 
-        if (DEBUG)
-        {
-            printf("Centroids updated successfully :D\n");
-            // printf("*************************\n");
-            // // Print old and new centroids
-            // printf("Old Centroids\n");
-            // for (int i = 0; i < K; i++)
-            // {
-            //     for (int j = 0; j < D; j++)
-            //     {
-            //         printf("%f ", centroids[i * D + j]);
-            //     }
-            //     printf("\n");
-            // }
-            // printf("\nNew Centroids\n");
-            // for (int i = 0; i < K; i++)
-            // {
-            //     for (int j = 0; j < D; j++)
-            //     {
-            //         printf("%f ", new_centroids[i * D + j]);
-            //     }
-            //     printf("\n");
-            // }
-            // printf("*************************\n");
-        }
+        // printf("Centroids updated successfully :D\n");
+        // printf("*************************\n");
+        // // Print old and new centroids
+        // printf("Old Centroids\n");
+        // for (int i = 0; i < K; i++)
+        // {
+        //     for (int j = 0; j < D; j++)
+        //     {
+        //         printf("%f ", centroids[i * D + j]);
+        //     }
+        //     printf("\n");
+        // }
+        // printf("\nNew Centroids\n");
+        // for (int i = 0; i < K; i++)
+        // {
+        //     for (int j = 0; j < D; j++)
+        //     {
+        //         printf("%f ", new_centroids[i * D + j]);
+        //     }
+        //     printf("\n");
+        // }
+        // printf("*************************\n");
 
         // check convergence
         int convergedCentroids = 0;
@@ -698,18 +686,11 @@ int main(int argc, char *argv[])
                 convergedCentroids++;
             }
         }
-        if (DEBUG)
-        {
-            printf("Converged Centroids: %d\n", convergedCentroids);
-        }
+
+        // printf("Converged Centroids: %d\n", convergedCentroids);
         // if 80% of the centroids have converged
         if (convergedCentroids >= K * CONVERGENCE_PERCENTAGE / 100.0)
         {
-
-            if (DEBUG)
-            {
-                printf("Converged after %d iterations\n", iteration);
-            }
             break;
         }
 
@@ -733,23 +714,17 @@ int main(int argc, char *argv[])
             printf("\033[0m");
         }
 
-        if (DEBUG)
-        {
-            printf("Cluster assignment done successfully :D\n");
-            // cudaMemcpy(cluster_assignment, d_cluster_assignment, N * sizeof(int), cudaMemcpyDeviceToHost); // [FOR DEGUB]
-            // for (int i = 0; i < N; i++)
-            // {
-            //     printf("%d ", cluster_assignment[i]);
-            // }
-        }
+        // printf("Cluster assignment done successfully :D\n");
+        // cudaMemcpy(cluster_assignment, d_cluster_assignment, N * sizeof(int), cudaMemcpyDeviceToHost); // [FOR DEGUB]
+        // for (int i = 0; i < N; i++)
+        // {
+        //     printf("%d ", cluster_assignment[i]);
+        // }
     }
 
     // Compute Shilloute Score :D [Very Expensive]
     // if (DEBUG)
-    if (true)
-    {
-        printf("Computing Shilloute Score ....\n");
-    }
+    printf("Computing Shilloute Score ....\n");
 
     // // Make cluter assignment random
     // for (int i = 0; i < N; i++)
