@@ -392,6 +392,9 @@ int main(int argc, char *argv[])
     float *d_centroids = 0;
     int *d_cluster_assignment = 0;
     int *d_cluster_sizes = 0;
+    clock_t start, end;
+    double time_used;
+    start = clock();
 
     cudaMalloc(&d_image, N * D * sizeof(float));
     cudaMalloc(&d_centroids, K * D * sizeof(float));
@@ -405,9 +408,6 @@ int main(int argc, char *argv[])
 
     int iteration = 0;
     // Compute Time
-    clock_t start, end;
-    double time_used;
-    start = clock();
     float total_time = 0;
     while (iteration < MAX_ITERATIONS)
     {
@@ -521,16 +521,21 @@ int main(int argc, char *argv[])
         // Update centroids
         centroids = new_centroids;
     }
-    // if (iteration == MAX_ITERATIONS)
-    // {
-    //     printf("Max Iterations reached :( \n");
-    // }
 
     // Copy Assigments
     cudaMemcpy(cluster_assignment, d_cluster_assignment, N * sizeof(int), cudaMemcpyDeviceToHost);
     end = clock();
     time_used = ((double)(end - start)) / CLOCKS_PER_SEC;
 
+    if (true)
+    {
+        printf("Converged after %d iterations\n", iteration);
+        }
+
+    if (iteration == MAX_ITERATIONS)
+    {
+        printf("Max Iterations reached :( \n");
+    }
     // // Cluster Assignments
     // printf("*************************\n");
     // for (int i = 0; i < N; i++)
