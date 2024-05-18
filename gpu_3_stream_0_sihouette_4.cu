@@ -16,6 +16,7 @@
 #include "stb_image_write.h"
 
 #define SEED 42
+#define MAX_DEPTH 3
 
 const int DEBUG = 0;
 
@@ -28,6 +29,17 @@ const int DEBUG = 0;
 const int K_max = 20;
 const int D = 3;
 int K = -1;
+
+#define cucheck_dev(call)                                          \
+    {                                                              \
+        cudaError_t cucheck_err = (call);                          \
+        if (cucheck_err != cudaSuccess)                            \
+        {                                                          \
+            const char *err_str = cudaGetErrorString(cucheck_err); \
+            printf("%s (%d): %s\n", __FILE__, __LINE__, err_str);  \
+            assert(0);                                             \
+        }                                                          \
+    }
 
 __host__ float *read_image(char *path, int *width, int *height, int *channels)
 {
@@ -234,7 +246,7 @@ __global__ void update_cluster_centroids(int data_points_num, int dimensions_num
     }
 }
 
-__global__ void compute_intra_cluster_distance(int point_idx, float *d_data_points, int *d_data_points_assigments, int N, int D, int K)
+__global__ void compute_intra_cluster_distance(float *d_data_points, int *d_data_points_assigments, int N, int D, int K, float *d_intra_cluster_distances)
 {
     /*
     Function to compute the intra cluster distance
@@ -246,39 +258,72 @@ __global__ void compute_intra_cluster_distance(int point_idx, float *d_data_poin
     N: number of data points
     D: number of dimensions
     K: number of clusters
+    d_intra_cluster_distance: intra cluster distance from point_idx to all other points in the same cluster
 
     returns: intra cluster distance from point_idx to all other points in the same cluster
     */
 
+    //   Each thread is responsible for 1 data point d_data_points[point_idx]
+
+    // thread in grid level
+    const int grid_tid = blockIdx.x * blockDim.x + threadIdx.x;
+
+    // thread index in block level
+    const int block_tid = threadIdx.x;
+
+    // check for out of bounds
+    if (grid_tid >= N)
+    {
+        return;
+    }
+
     float intra_cluster_distance = 0;
     int count = 0;
 
+    // Then compute the intra cluster distance for d_data_points[grid_tid]
     for (int i = 0; i < N; i++)
     {
-        if (data_points_assigments[i] == data_points_assigments[point_idx] && i != point_idx) // Don't compute distance with itself :D
+        if (d_data_points_assigments[i] == d_data_points_assigments[grid_tid] && i != grid_tid) // Don't compute distance with itself :D
         {
             // In the same cluster
-            // Compute distance between data_points[i] and data_points[point_idx]
-            intra_cluster_distance += distance(data_points + i * D, data_points + point_idx * D, D);
+            // Compute distance between data_points[i] and data_points[grid_tid]
+            intra_cluster_distance += distance(d_data_points + i * D, d_data_points + grid_tid * D, D);
             count++;
         }
     }
 
-    // Average distance :D
-    return (count == 0) ? 0.0 : intra_cluster_distance / count;
+    // Compute the average distance
+    float a_score = (count == 0) ? 0.0 : intra_cluster_distance / count;
+
+    // Store the result in the output array
+    d_intra_cluster_distances[grid_tid] = a_score;
 }
 
-__device__ __host__ float compute_inter_cluster_distance(int point_idx, float *data_points, int *data_points_assigments, float *d_centroids, int N, int D, int K)
+__global__ void compute_inter_cluster_distance(float *d_data_points, int *d_cluster_assigments, float *d_centroids, int N, int D, int K, float *d_inter_cluster_distances)
 {
+    //   Each thread is responsible for 1 data point d_data_points[point_idx]
+
+    // thread in grid level
+    const int grid_tid = blockIdx.x * blockDim.x + threadIdx.x;
+
+    // thread index in block level
+    const int block_tid = threadIdx.x;
+
+    // check for out of bounds
+    if (grid_tid >= N)
+    {
+        return;
+    }
+
     float nearest_centroid_dist = FLT_MAX;
     int nearest_centroid_idx = -1;
 
-    // Compute distance between data_points[point_idx] and all other centroids :D to find the nearest centroid
+    // Compute distance between data_points[grid_tid] and all other centroids :D to find the nearest centroid
     for (int i = 0; i < K; i++)
     {
-        if (i != data_points_assigments[point_idx]) // Don't compute distance with the same cluster centroid :D
+        if (i != d_cluster_assigments[grid_tid]) // Don't compute distance with the same cluster centroid :D
         {
-            float dist = distance(data_points + point_idx * D, d_centroids + i * D, D);
+            float dist = distance(d_data_points + grid_tid * D, d_centroids + i * D, D);
             if (dist < nearest_centroid_dist)
             {
                 nearest_centroid_idx = i;
@@ -292,17 +337,20 @@ __device__ __host__ float compute_inter_cluster_distance(int point_idx, float *d
     // Compute distance between data_points[point_idx] and all other points in the nearest centroid cluster
     for (int i = 0; i < N; i++)
     {
-        if (data_points_assigments[i] == nearest_centroid_idx)
+        if (d_cluster_assigments[i] == nearest_centroid_idx)
         {
             // In the same cluster
             // Compute distance between data_points[i] and data_points[point_idx]
-            inter_cluster_distance += distance(data_points + i * D, data_points + point_idx * D, D);
+            inter_cluster_distance += distance(d_data_points + i * D, d_data_points + grid_tid * D, D);
             count++;
         }
     }
 
-    // Average distance :D
-    return (count == 0) ? 0.0 : inter_cluster_distance / count;
+    // Compute the average distance
+    float b_score = (count == 0) ? 0.0 : inter_cluster_distance / count;
+
+    // Store the result in the output array
+    d_inter_cluster_distances[grid_tid] = (count == 0) ? 0.0 : inter_cluster_distance / count;
 }
 
 /*
@@ -317,7 +365,7 @@ K: number of clusters
 
 returns: shilloute score
 */
-__global__ void compute_shetollute_score(float *d_data_points, int *d_cluster_assignment, float *d_centroids, int N, int D, int K, float *d_shilloute_scores_a, float *d_shilloute_scores_b)
+__global__ void compute_shetollute_score(float *d_data_points, int *d_cluster_assignment, float *d_centroids, int N, int D, int K, float *d_intra_cluster_distances, float *d_inter_cluster_distances)
 {
 
     // Each thread is responsible for 1 data point
@@ -334,12 +382,20 @@ __global__ void compute_shetollute_score(float *d_data_points, int *d_cluster_as
         return;
     }
 
-    // Compute the average distance of the data point to all other points in the same cluster
-    // float a = compute_intra_cluster_distance(grid_tid, d_data_points, d_cluster_assignment, N, D, K);
-    compute_intra_cluster_distance<<<1, 1>>>(grid_tid, d_data_points, d_cluster_assignment, N, D, K, d_shilloute_scores_a + grid_tid);
+    printf("grid_tid: %d\n", grid_tid);
+
+    // Lauch kernel to compute the shilloute score for each data point
+
+    // Compute the average distance of the data point to all other points in the same cluster  for d_data_points[grid_tid]
+    int num_blocks = (N + THREADS_PER_BLOCK - 1) / THREADS_PER_BLOCK; // ceil(N/THREADS_PER_BLOCK)
+    compute_intra_cluster_distance<<<num_blocks, THREADS_PER_BLOCK>>>(d_data_points, d_cluster_assignment, N, D, K, d_intra_cluster_distances);
+
     // Compute the average distance of the data point to all other points in the nearest cluster
-    compute_inter_cluster_distance(grid_tid, d_data_points, d_cluster_assignment, d_centroids, N, D, K);
-    float shilloute_score = (b - a) / max(a, b);
+    compute_inter_cluster_distance<<<num_blocks, THREADS_PER_BLOCK>>>(d_data_points, d_cluster_assignment, d_centroids, N, D, K, d_inter_cluster_distances);
+
+    // Wait for the kernels to finish
+    cucheck_dev(cudaGetLastError());
+    __syncthreads();
 }
 
 __host__ float *intilize_centroids(int N, int D, int K, float *data_points)
@@ -737,6 +793,11 @@ int main(int argc, char *argv[])
     // Copy to device
     // cudaMemcpy(d_cluster_assignment, cluster_assignment, N * sizeof(int), cudaMemcpyHostToDevice);
     // compute_shetollute_score<<<num_blocks, THREADS_PER_BLOCK>>>(d_image, d_cluster_assignment, d_centroids, N, D, K, d_shilloute_scores);
+
+    // We set the recursion limit for CDP to max_depth.
+    cudaDeviceSetLimit(cudaLimitDevRuntimeSyncDepth, MAX_DEPTH);
+
+    // Lauch kernel to compute the shilloute score for each data point
     compute_shetollute_score<<<num_blocks, THREADS_PER_BLOCK>>>(d_image, d_cluster_assignment, d_centroids, N, D, K, d_shilloute_scores_a, d_shilloute_scores_b);
     cudaDeviceSynchronize();
     error = cudaGetLastError();
@@ -750,12 +811,21 @@ int main(int argc, char *argv[])
     }
 
     // // Copy Shilloute Scores To Host
-    // cudaMemcpy(shilloute_scores_a, d_shilloute_scores_a, num_blocks * sizeof(float), cudaMemcpyDeviceToHost);
-    // cudaMemcpy(shilloute_scores_b, d_shilloute_scores_b, num_blocks * sizeof(float), cudaMemcpyDeviceToHost);
+    cudaMemcpy(shilloute_scores_a, d_shilloute_scores_a, N * sizeof(float), cudaMemcpyDeviceToHost);
+    cudaMemcpy(shilloute_scores_b, d_shilloute_scores_b, N * sizeof(float), cudaMemcpyDeviceToHost);
+
+    // Compute the average shilloute score
+    float shetollute_score = 0;
+    for (int i = 0; i < N; i++)
+    {
+        shetollute_score += (shilloute_scores_b[i] - shilloute_scores_a[i]) / max(shilloute_scores_a[i], shilloute_scores_b[i]);
+    }
+    shetollute_score /= N;
+
     // // cudaMemcpy(shilloute_scores, d_shilloute_scores, num_blocks * sizeof(float), cudaMemcpyDeviceToHost);
 
     // // Compute the average shilloute score
-    float shetollute_score = 0;
+    // float shetollute_score = 0;
     // for (int i = 0; i < num_blocks; i++)
     // {
     //     shetollute_score += shilloute_scores[i];
@@ -808,6 +878,6 @@ int main(int argc, char *argv[])
     return 0;
 }
 
-// nvcc -o out_gpu_3_stream_0_sihouette_2  ./gpu_3_stream_0_sihouette_2.cu
-// ./out_gpu_3_stream_0_sihouette_2 .\tests\image_3.png 5
-// D:\Parallel-Computing-Project>nvprof -o ./profiles/out_gpu_3_stream_0_sihouette_2.nvprof ./out_gpu_3_stream_0_sihouette_2 ./tests/image_3.png 5
+// nvcc -o out_gpu_3_stream_0_sihouette_4  ./gpu_3_stream_0_sihouette_4.cu
+// ./out_gpu_3_stream_0_sihouette_4 .\tests\image_3.png 5
+// D:\Parallel-Computing-Project>nvprof -o ./profiles/out_gpu_3_stream_0_sihouette_4.nvprof ./out_gpu_3_stream_0_sihouette_4 ./tests/image_3.png 5
