@@ -15,6 +15,8 @@
 #define STB_IMAGE_WRITE_IMPLEMENTATION
 #include "stb_image_write.h"
 
+#define DEBUG 1
+
 #define THREADS_PER_BLOCK 32
 #define EPSILON 0.0001
 #define MAX_ITERATIONS 100
@@ -401,14 +403,17 @@ int main(int argc, char *argv[])
     cudaMalloc(&d_cluster_assignment, N * sizeof(int));
     cudaMalloc(&d_cluster_sizes, K * sizeof(int)); // Array to store the size of each cluster
 
+    // Compute Time
+    clock_t start, end;
+    double total_time;
+    start = clock();
+
     // Copy data from host to devic [image]
     cudaMemcpy(d_image, image, N * D * sizeof(float), cudaMemcpyHostToDevice);
 
     int num_blocks = (N + THREADS_PER_BLOCK - 1) / THREADS_PER_BLOCK; // ceil(N/THREADS_PER_BLOCK)
 
     int iteration = 0;
-    // Compute Time
-    float total_time = 0;
     while (iteration < MAX_ITERATIONS)
     {
         // print the current
@@ -478,6 +483,7 @@ int main(int argc, char *argv[])
                 new_centroids[i * D + j] /= cluster_sizes[i];
             }
         }
+
         // printf("Centroids updated successfully :D\n");
         // printf("*************************\n");
         // // Print old and new centroids
@@ -511,31 +517,41 @@ int main(int argc, char *argv[])
             }
         }
         // printf("Converged Centroids: %d\n", convergedCentroids);
-        // // if 80% of the centroids have converged
-        // if (convergedCentroids >= K * CONVERGENCE_PERCENTAGE / 100.0)
-        // {
-        //     printf("Converged after %d iterations\n", iteration);
-        //     break;
-        // }
+        // if 80% of the centroids have converged
+        if (convergedCentroids >= K * CONVERGENCE_PERCENTAGE / 100.0)
+        {
+            break;
+        }
 
         // Update centroids
         centroids = new_centroids;
     }
 
-    // Copy Assigments
-    cudaMemcpy(cluster_assignment, d_cluster_assignment, N * sizeof(int), cudaMemcpyDeviceToHost);
     end = clock();
-    time_used = ((double)(end - start)) / CLOCKS_PER_SEC;
+    total_time = ((double)(end - start)) / CLOCKS_PER_SEC;
 
-    if (true)
+    if (DEBUG)
+    {
+        printf("Time taken [DEBUG]: %f sec\n", total_time);
+    }
+    else
+    {
+        printf("Time taken: %f sec\n", total_time);
+    }
+
+    if (!DEBUG)
     {
         printf("Converged after %d iterations\n", iteration);
-        }
+    }
 
     if (iteration == MAX_ITERATIONS)
     {
         printf("Max Iterations reached :( \n");
     }
+
+    // Copy Assigments
+    cudaMemcpy(cluster_assignment, d_cluster_assignment, N * sizeof(int), cudaMemcpyDeviceToHost);
+
     // // Cluster Assignments
     // printf("*************************\n");
     // for (int i = 0; i < N; i++)
@@ -551,7 +567,6 @@ int main(int argc, char *argv[])
     stbi_write_png(output_path.c_str(), width, height, 3, clutsered_image, width * 3);
     printf("Image saved successfully at: %s\n", output_path.c_str());
 
-    printf("Time taken: %f\n", time_used);
     return 0;
 }
 
