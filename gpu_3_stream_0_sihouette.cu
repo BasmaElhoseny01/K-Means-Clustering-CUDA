@@ -21,7 +21,7 @@ const int DEBUG = 0;
 
 #define THREADS_PER_BLOCK 32
 #define NUMOFSTREAMS 32
-#define EPSILON 0.0001
+#define EPSILON 1e-4
 #define MAX_ITERATIONS 100
 #define CONVERGENCE_PERCENTAGE 80
 

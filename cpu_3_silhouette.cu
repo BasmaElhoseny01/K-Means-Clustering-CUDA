@@ -342,7 +342,7 @@ __host__ float compute_inter_cluster_distance(int point_idx, float *data_points,
         }
     }
 
-    float inter_cluster_distance = FLT_MAX;
+    float inter_cluster_distance = 0;
     int count = 0;
 
     // Compute distance between data_points[point_idx] and all other points in the nearest centroid cluster
@@ -554,7 +554,7 @@ int main(int argc, char *argv[])
     end = clock();
     cpu_time_used = ((double)(end - start)) / CLOCKS_PER_SEC;
 
-    printf ("Shetollute Score: %f\n", shetollute_score);
+    printf("Shetollute Score: %f\n", shetollute_score);
     if (DEBUG)
     {
         printf("Time taken [DEBUG]: %f sec\n", cpu_time_used);
