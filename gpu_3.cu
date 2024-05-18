@@ -15,13 +15,15 @@
 #define STB_IMAGE_WRITE_IMPLEMENTATION
 #include "stb_image_write.h"
 
+#define DEBUG 0
+
 #define THREADS_PER_BLOCK 32
 #define EPSILON 0.0001
 #define MAX_ITERATIONS 100
 #define CONVERGENCE_PERCENTAGE 80
 
 const int K_max = 20;
-const int D=3;
+const int D = 3;
 int K = -1;
 
 __host__ float *read_image(char *path, int *width, int *height, int *channels)
@@ -153,7 +155,7 @@ __global__ void update_cluster_centroids(int data_points_num, int dimensions_num
     const int block_tid = threadIdx.x;
 
     // Shared memory for reduction
-    __shared__ float shared_data_points[THREADS_PER_BLOCK*D];
+    __shared__ float shared_data_points[THREADS_PER_BLOCK * D];
     // each thread loads the data point to shared memory
     for (int i = 0; i < dimensions_num; i++)
     {
@@ -169,8 +171,8 @@ __global__ void update_cluster_centroids(int data_points_num, int dimensions_num
 
     if (block_tid == 0)
     {
-        float data_point_sum[K_max*D] = {0}; // sum of data points for each cluster
-        int cluster_size[K_max] = {0};     // temporary cluster size
+        float data_point_sum[K_max * D] = {0}; // sum of data points for each cluster
+        int cluster_size[K_max] = {0};         // temporary cluster size
 
         // for each data point, check its cluster assignment
         // and add the data point to the corresponding cluster
@@ -210,7 +212,8 @@ __host__ float *intilize_centroids(int N, int D, int K, float *data_points)
 
     returns: centroids as a 1D array
     */
-    srand(time(NULL)); // Seed for randomization
+    // srand(time(NULL)); // Seed for randomization
+    srand(42); // Seed for reproducibility
 
     float *centroids = (float *)malloc(K * D * sizeof(float));
     for (int i = 0; i < K; i++)
@@ -371,21 +374,22 @@ int main(int argc, char *argv[])
     cudaMalloc(&d_cluster_assignment, N * sizeof(int));
     cudaMalloc(&d_cluster_sizes, K * sizeof(int)); // Array to store the size of each cluster
 
+    // Compute Time
+    clock_t start, end;
+    double total_time;
+    start = clock();
+
     // Copy data from host to devic [image]
     cudaMemcpy(d_image, image, N * D * sizeof(float), cudaMemcpyHostToDevice);
 
     int num_blocks = (N + THREADS_PER_BLOCK - 1) / THREADS_PER_BLOCK; // ceil(N/THREADS_PER_BLOCK)
 
     int iteration = 0;
-    // Compute Time
-    clock_t start, end;
-    double time_used;
-    start = clock();
     while (iteration < MAX_ITERATIONS)
     {
         // print the current
         iteration++;
-        printf("Iteration: %d/%d\n", iteration, MAX_ITERATIONS);
+        // printf("Iteration: %d/%d\n", iteration, MAX_ITERATIONS);
 
         // Copy data from host to device [centroids]
         cudaMemcpy(d_centroids, centroids, K * D * sizeof(float), cudaMemcpyHostToDevice);
@@ -404,11 +408,11 @@ int main(int argc, char *argv[])
             printf("\033[0m");
         }
 
-        printf("Cluster assignment done successfully :D\n");
+        // printf("Cluster assignment done successfully :D\n");
         // cudaMemcpy(cluster_assignment, d_cluster_assignment, N * sizeof(int), cudaMemcpyDeviceToHost); // [FOR DEGUB]
-        // for (int i = 0; i < N; i++)
+        // for (int i = 0; i < 20; i++)
         // {
-        //     printf("%d ", cluster_assignment[i]);
+        //     printf("%d\n", cluster_assignment[i]);
         // }
 
         // Reset the cluster sizes
@@ -447,7 +451,14 @@ int main(int argc, char *argv[])
                 new_centroids[i * D + j] /= cluster_sizes[i];
             }
         }
-        printf("Centroids updated successfully :D\n");
+        // print cluster sizes
+        // for (int i = 0; i < K; i++)
+        // {
+        //     printf("%d ", cluster_sizes[i]);
+        // }
+        // printf?("\n");
+        // return 0;
+        // printf("Centroids updated successfully :D\n");
         // printf("*************************\n");
         // // Print old and new centroids
         // printf("Old Centroids\n");
@@ -470,6 +481,8 @@ int main(int argc, char *argv[])
         // }
         // printf("*************************\n");
 
+        // return 0;
+
         // check convergence
         int convergedCentroids = 0;
         for (int i = 0; i < K; i++)
@@ -479,24 +492,37 @@ int main(int argc, char *argv[])
                 convergedCentroids++;
             }
         }
-        printf("Converged Centroids: %d\n", convergedCentroids);
+        // printf("Converged Centroids: %d\n", convergedCentroids);
         // if 80% of the centroids have converged
         if (convergedCentroids >= K * CONVERGENCE_PERCENTAGE / 100.0)
         {
-            printf("Converged\n");
             break;
         }
 
         // Update centroids
         centroids = new_centroids;
     }
+    end = clock();
+    total_time = ((double)(end - start)) / CLOCKS_PER_SEC;
+
+    if (DEBUG)
+    {
+        printf("Time taken [DEBUG]: %f sec\n", total_time);
+    }
+    else
+    {
+        printf("Time taken: %f sec\n", total_time);
+    }
+
+    if (!DEBUG)
+    {
+        printf("Converged after %d iterations\n", iteration);
+    }
+
     if (iteration == MAX_ITERATIONS)
     {
         printf("Max Iterations reached :( \n");
     }
-    end = clock();
-    time_used = ((double)(end - start)) / CLOCKS_PER_SEC;
-
 
     // Copy Assigments
     cudaMemcpy(cluster_assignment, d_cluster_assignment, N * sizeof(int), cudaMemcpyDeviceToHost);
@@ -512,11 +538,10 @@ int main(int argc, char *argv[])
 
     // Save the clustered image
     std::string input_path(input_file_path);
-    std::string output_path = input_path.substr(0, input_path.find_last_of('.')) + "_output_gpu.png";
+    std::string output_path = input_path.substr(0, input_path.find_last_of('.')) + "_output_gpu_3.png";
     stbi_write_png(output_path.c_str(), width, height, 3, clutsered_image, width * 3);
     printf("Image saved successfully at: %s\n", output_path.c_str());
 
-    printf("Time taken: %f\n", time_used);
     return 0;
 }
 

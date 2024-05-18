@@ -15,7 +15,7 @@
 #define STB_IMAGE_WRITE_IMPLEMENTATION
 #include "stb_image_write.h"
 
-#define DEBUG 1
+#define DEBUG 0
 
 #define THREADS_PER_BLOCK 32
 #define EPSILON 0.0001
@@ -394,9 +394,6 @@ int main(int argc, char *argv[])
     float *d_centroids = 0;
     int *d_cluster_assignment = 0;
     int *d_cluster_sizes = 0;
-    clock_t start, end;
-    double time_used;
-    start = clock();
 
     cudaMalloc(&d_image, N * D * sizeof(float));
     cudaMalloc(&d_centroids, K * D * sizeof(float));
@@ -440,10 +437,12 @@ int main(int argc, char *argv[])
 
         // printf("Cluster assignment done successfully :D\n");
         // cudaMemcpy(cluster_assignment, d_cluster_assignment, N * sizeof(int), cudaMemcpyDeviceToHost); // [FOR DEGUB]
-        // for (int i = 0; i < N; i++)
+        // // for (int i = N-1; i > N-50; i--)
+        // for (int i = 9020; i < 9060; i++)
         // {
         //     printf("%d ", cluster_assignment[i]);
         // }
+        // return 0;
 
         // Reset the cluster sizes
         cudaMemset(d_cluster_sizes, 0, K * sizeof(int));
@@ -506,6 +505,7 @@ int main(int argc, char *argv[])
         //     printf("\n");
         // }
         // printf("*************************\n");
+        // return 0;
 
         // check convergence
         int convergedCentroids = 0;
@@ -563,7 +563,7 @@ int main(int argc, char *argv[])
 
     // Save the clustered image
     std::string input_path(input_file_path);
-    std::string output_path = input_path.substr(0, input_path.find_last_of('.')) + "_output_gpu.png";
+    std::string output_path = input_path.substr(0, input_path.find_last_of('.')) + "_output_gpu_3_2.png";
     stbi_write_png(output_path.c_str(), width, height, 3, clutsered_image, width * 3);
     printf("Image saved successfully at: %s\n", output_path.c_str());
 
