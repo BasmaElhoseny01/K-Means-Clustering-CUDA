@@ -237,7 +237,7 @@ __host__ float *intilize_centroids(int N, int D, int K, float *data_points)
 
     returns: centroids as a 1D array
     */
-    srand(time(NULL)); // Seed for randomization
+    srand(42); // Seed for randomization
 
     float *centroids = (float *)malloc(K * D * sizeof(float));
     for (int i = 0; i < K; i++)
@@ -408,11 +408,12 @@ int main(int argc, char *argv[])
     clock_t start, end;
     double time_used;
     start = clock();
+    float total_time = 0;
     while (iteration < MAX_ITERATIONS)
     {
         // print the current
         iteration++;
-        printf("Iteration: %d/%d\n", iteration, MAX_ITERATIONS);
+        // printf("Iteration: %d/%d\n", iteration, MAX_ITERATIONS);
 
         // Copy data from host to device [centroids]
         cudaMemcpy(d_centroids, centroids, K * D * sizeof(float), cudaMemcpyHostToDevice);
@@ -432,7 +433,7 @@ int main(int argc, char *argv[])
             printf("\033[0m");
         }
 
-        printf("Cluster assignment done successfully :D\n");
+        // printf("Cluster assignment done successfully :D\n");
         // cudaMemcpy(cluster_assignment, d_cluster_assignment, N * sizeof(int), cudaMemcpyDeviceToHost); // [FOR DEGUB]
         // for (int i = 0; i < N; i++)
         // {
