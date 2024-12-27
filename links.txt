@@ -1,3 +1,0 @@
-https://towardsdatascience.com/batched-k-means-with-python-numba-and-cuda-c-3d4946c587b9
-https://alexminnaar.com/2019/03/05/cuda-kmeans.html
-https://www.goldsborough.me/c++/python/cuda/2017/09/10/20-32-46-exploring_k-means_in_python,_c++_and_cuda/
